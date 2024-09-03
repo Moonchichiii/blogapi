@@ -18,3 +18,4 @@ psycopg2-binary==2.9.9
 python-decouple==3.8
 setuptools==69.2.0
 whitenoise==6.7.0
+django-ratelimit==4.1.0

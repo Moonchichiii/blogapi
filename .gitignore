@@ -181,3 +181,4 @@ __pypackages__
 Pipfile.lock
 /static/
 .env
+settings_production.py
