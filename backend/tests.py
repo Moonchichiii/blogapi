@@ -44,7 +44,7 @@ class AuthenticationTests(TestCase):
         data = {
             "email": "testuser3@example.com",
             "password": "StrongPassword123!"
-    }
+        }
         response = self.client.post(self.login_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('access', response.data)

@@ -35,6 +35,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
     def post(self, request, *args, **kwargs):
         try:
+            print("Request Data:", request.data)
             user = CustomUser.objects.get(email=request.data.get('email'))
             email_address = EmailAddress.objects.get(user=user)
             if not email_address.verified:
@@ -91,6 +92,15 @@ class UpdateEmailView(generics.UpdateAPIView):
     def get_object(self):
         return self.request.user
 
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+
+
 # Logout View
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
@@ -106,7 +116,5 @@ class CurrentUserView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = UserSerializer
 
-    def get(self, request, *args, **kwargs):
-        user = self.get_object()
-        user_data = self.get_serializer(user).data
-        return Response(user_data)
+    def get_object(self):
+        return self.request.user
