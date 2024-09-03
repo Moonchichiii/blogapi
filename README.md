@@ -1,8 +1,7 @@
 # BlogClient Backend
 
-## 👉 [Link to Live Project]()
+## 👉 [Link to Live Project]()  👉  [Project Board link](https://github.com/users/Moonchichiii/projects/39) 📄
 
-## 👉 [Project Board link](https://github.com/users/Moonchichiii/projects/39)
 
 ## Table of Contents
 
