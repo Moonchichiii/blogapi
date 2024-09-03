@@ -2,6 +2,8 @@
 
 ## 👉 [Link to Live Project]()
 
+##👉 [Project Board link](https://github.com/users/Moonchichiii/projects/39)
+
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
@@ -80,7 +82,7 @@ The **BlogClient Backend** serves as the API and data management layer for the B
 - **Development Preparation:** Initial steps included planning data models and API architecture.
 - **Feature Tracking & Task Management:** Tasks are categorized and moved through stages (Todo, In Progress, Done).
 
-👉 [Project Board link]()
+👉 [Project Board link](https://github.com/users/Moonchichiii/projects/39)
 
 ### Data Models
 
