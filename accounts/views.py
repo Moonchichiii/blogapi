@@ -36,36 +36,28 @@ class CustomRegisterView(RegisterView):
 # Custom Token Obtain Pair View
 @method_decorator(ratelimit(key='ip', rate='5/m', method='POST', block=True), name='post')
 class CustomTokenObtainPairView(TokenObtainPairView):
-    permission_classes = [AllowAny]
-
     def post(self, request, *args, **kwargs):
-        try:
-            user = CustomUser.objects.get(email=request.data.get('email'))
-            email_address = EmailAddress.objects.get(user=user)
-            if not email_address.verified:
-                return Response({"detail": "Email is not verified."}, status=status.HTTP_400_BAD_REQUEST)
-        except CustomUser.DoesNotExist:
-            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
-        except EmailAddress.DoesNotExist:
-            return Response({"detail": "Email address not found."}, status=status.HTTP_404_NOT_FOUND)
-
         response = super().post(request, *args, **kwargs)
-        if response.status_code == 200:
-            tokens = response.data
-            secure_cookie = request.is_secure()
+        if response.status_code == status.HTTP_200_OK:
+            user = CustomUser.objects.get(email=request.data['email'])
+            email_address = EmailAddress.objects.get(user=user, email=user.email)
+            if not email_address.verified:
+                return Response({"detail": "Please verify your email before logging in."}, status=status.HTTP_403_FORBIDDEN)
+            
+            # Set JWT tokens in cookies
             response.set_cookie(
                 'access_token',
-                tokens['access'],
+                response.data['access'],
                 httponly=True,
-                secure=secure_cookie,
-                samesite='None'
+                secure=request.is_secure(),
+                samesite='Lax'
             )
             response.set_cookie(
                 'refresh_token',
-                tokens['refresh'],
+                response.data['refresh'],
                 httponly=True,
-                secure=secure_cookie,
-                samesite='None'
+                secure=request.is_secure(),
+                samesite='Lax'
             )
         return response
 

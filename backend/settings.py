@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import timedelta
 from decouple import config, Csv
 
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -33,7 +34,7 @@ AUTHENTICATION_BACKENDS = [
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
-AUTH_USER_MODEL = 'profiles.CustomUser'
+AUTH_USER_MODEL = 'accounts.CustomUser'
 
 
 ACCOUNT_AUTHENTICATION_METHOD = 'email'
@@ -94,11 +95,12 @@ INSTALLED_APPS = [
     'dj_rest_auth',
     'dj_rest_auth.registration',
     'corsheaders',
-    'django_filters',
+    'django_filters', 
     'cloudinary_storage',
     'cloudinary',
     
     'administration',
+    'accounts',
     'profiles',
     'posts',
     'comments',

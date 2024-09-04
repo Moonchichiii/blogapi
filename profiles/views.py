@@ -6,7 +6,7 @@ from .serializers import ProfileSerializer
 
 class UpdateProfileView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = ProfileSerializer  
+    serializer_class = ProfileSerializer
 
     def get_object(self):
         return self.request.user.profile

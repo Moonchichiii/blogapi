@@ -129,30 +129,24 @@ The **BlogClient Backend** serves as the API and data management layer for the B
 ## Setup and Installation
 
 1. **Clone the Repository**
-   ```bash
+   `
    git clone https://github.com/yourusername/blogclient-backend.git`` 
 
 2.  **Install Dependencies**
     
-    bash
     
-    Copy code
     
     `pip install -r requirements.txt` 
     
 3.  **Run Migrations**
     
-    bash
     
-    Copy code
     
     `python manage.py migrate` 
     
 4.  **Start the Development Server**
     
-    bash
     
-    Copy code
     
     `python manage.py runserver` 
     
@@ -167,9 +161,6 @@ The **BlogClient Backend** serves as the API and data management layer for the B
 -   **Integration Tests:** Ensure that API endpoints function as expected.
 -   **Run Tests:**
     
-    bash
-    
-    Copy code
     
     `python manage.py test` 
     
@@ -192,9 +183,6 @@ The **BlogClient Backend** serves as the API and data management layer for the B
 
 -   **Push your code** to Heroku and run migrations.
     
-    bash
-    
-    Copy code
     
     `git push heroku main
     heroku run python manage.py migrate` 
