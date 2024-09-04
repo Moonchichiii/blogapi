@@ -1,6 +1,8 @@
+from django.db import IntegrityError
 from profiles.models import CustomUser
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
+from rest_framework.exceptions import ValidationError
 
 class RegisterSerializer(serializers.ModelSerializer):
     password1 = serializers.CharField(write_only=True, validators=[validate_password])
@@ -8,30 +10,44 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['username', 'email', 'first_name', 'last_name', 'address', 'phone_number', 'password1', 'password2']
+        fields = ['profile_name', 'email', 'password1', 'password2']
+
+    def validate_email(self, value):
+        """Ensure email is unique."""
+        if CustomUser.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def validate_profile_name(self, value):
+        """Ensure profile_name is unique."""
+        if CustomUser.objects.filter(profile_name=value).exists():
+            raise serializers.ValidationError("This profile name is already taken.")
+        return value
 
     def validate(self, data):
+        """Ensure that the passwords match."""
         if data['password1'] != data['password2']:
-            raise serializers.ValidationError({"password": "Passwords do not match"})
-        if CustomUser.objects.filter(username=data['username']).exists():
-            raise serializers.ValidationError({"username": "Username already exists"})
-        if CustomUser.objects.filter(email=data['email']).exists():
-            raise serializers.ValidationError({"email": "Email already exists"})
+            raise serializers.ValidationError({"password": "Passwords do not match."})
         return data
 
     def create(self, validated_data):
-        user = CustomUser.objects.create_user(
-            username=validated_data['username'],
-            email=validated_data['email'],
-            first_name=validated_data['first_name'],
-            last_name=validated_data['last_name'],
-            address=validated_data['address'],
-            phone_number=validated_data['phone_number'],
-            password=validated_data['password1'] 
-        )
+        """Create and return a new user instance."""
+        try:
+            user = CustomUser.objects.create_user(
+                profile_name=validated_data['profile_name'],
+                email=validated_data['email'],
+                password=validated_data['password1']
+            )
+        except IntegrityError as e:
+            raise ValidationError("A user with this email or profile name already exists.")
         return user
 
+
+
 class UserSerializer(serializers.ModelSerializer):
+    profile = ProfileSerializer()
+
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'email', 'profile']
+        fields = ['id', 'profile_name', 'profile', 'is_staff']
+        extra_kwargs = {'email': {'write_only': True}}

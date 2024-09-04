@@ -5,28 +5,33 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from dj_rest_auth.registration.views import RegisterView
+from dj_rest_auth.registration.views import RegisterView, VerifyEmailView
 from allauth.account.models import EmailAddress
 from allauth.account.utils import send_email_confirmation
 from profiles.serializers import UserSerializer
+
 
 CustomUser = get_user_model()
 
 # Custom Register View
 class CustomRegisterView(RegisterView):
+    """Custom view for user registration with email confirmation."""
+    
     def perform_create(self, serializer):
+        """Saves the user and sends an email confirmation."""
         user = serializer.save(self.request)
         send_email_confirmation(self.request, user)
         return user
 
     def create(self, request, *args, **kwargs):
+        """Handles the creation of a user account."""
         response = super().create(request, *args, **kwargs)
         response.data = {
             "detail": "Verification email sent. Please confirm your email address to complete registration."
         }
         return Response(response.data, status=status.HTTP_201_CREATED)
+
 
 # Custom Token Obtain Pair View
 @method_decorator(ratelimit(key='ip', rate='5/m', method='POST', block=True), name='post')
@@ -35,7 +40,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
     def post(self, request, *args, **kwargs):
         try:
-            print("Request Data:", request.data)
             user = CustomUser.objects.get(email=request.data.get('email'))
             email_address = EmailAddress.objects.get(user=user)
             if not email_address.verified:
@@ -64,6 +68,17 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 samesite='None'
             )
         return response
+
+
+
+
+class CustomVerifyEmailView(VerifyEmailView):
+    def get(self, request, *args, **kwargs):
+        response = super().get(request, *args, **kwargs)
+        if response.status_code == 200:
+            return Response({"detail": "Email confirmed!"}, status=status.HTTP_200_OK)
+        return response
+
 
 
 # Custom Token Refresh View

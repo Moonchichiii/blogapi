@@ -10,10 +10,11 @@ from .views import (
     CurrentUserView,
 )
 
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/register/', RegisterView.as_view(), name='auth_register'),
-    path('api/auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),    
+    path('api/auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/logout/', LogoutView.as_view(), name='auth_logout'),
     path('api/auth/user/', CurrentUserView.as_view(), name='current_user'),    
