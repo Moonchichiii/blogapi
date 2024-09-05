@@ -27,6 +27,7 @@ urlpatterns = [
     # Dj-rest-auth and Allauth Views
     path('', include('dj_rest_auth.urls')),
     path('registration/', include('dj_rest_auth.registration.urls')),
-    path('account-confirm-email/<str:key>/', VerifyEmailView.as_view(template_name='accounts/confirm_email.html'), name='account_confirm_email'),
+    path('account-confirm-email/<str:uidb64>/<str:token>/', CustomVerifyEmailView.as_view(), name='account_confirm_email'),
+
     path('account-resend-verification/', ResendEmailVerificationView.as_view(), name="account_resend_verification"),
 ]

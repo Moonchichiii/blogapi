@@ -8,5 +8,8 @@
 <body>
     <h1>Email Confirmation</h1>
     <p>Thank you for confirming your email address. You can now log in.</p>
+    <a href="{{ protocol }}://{{ domain }}/api/accounts/account-confirm-email/{{ uid }}/{{ token }}/">
+        Confirm your email
+    </a>
 </body>
 </html>

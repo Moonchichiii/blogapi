@@ -47,11 +47,15 @@ class CustomRegisterView(RegisterView):
         send_email_confirmation(self.request, user)
 
     def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        response.data = {
-            "detail": "Verification email sent. Please confirm your email address to complete registration."
-        }
-        return Response(response.data, status=status.HTTP_201_CREATED)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            {"detail": "Verification email sent. Please confirm your email address to complete registration."},
+            status=status.HTTP_201_CREATED,
+            headers=headers
+        )
 
 # ------------------------------
 # Custom Token Obtain Pair View
