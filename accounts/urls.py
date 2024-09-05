@@ -21,15 +21,9 @@ urlpatterns = [
     path('user/', CurrentUserView.as_view(), name='current_user'),
     path('update-email/', UpdateEmailView.as_view(), name='update_email'),
     path('delete-account/', AccountDeletionView.as_view(), name='account_delete'),
-
-    
-    
-
-
     # Password Reset
     path('password-reset/', PasswordResetView.as_view(), name='password_reset'),
     path('password-reset-confirm/<str:uidb64>/<str:token>/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
-
     # Dj-rest-auth and Allauth Views
     path('', include('dj_rest_auth.urls')),
     path('registration/', include('dj_rest_auth.registration.urls')),

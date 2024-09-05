@@ -3,46 +3,59 @@ from django.contrib.auth.password_validation import validate_password
 from .models import CustomUser
 from profiles.serializers import ProfileSerializer
 from django.db.utils import IntegrityError
+from rest_framework.validators import UniqueValidator
 
 # ------------------------------
 # Custom Registration Serializer
 # ------------------------------
-
-
 class CustomRegisterSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(
+        required=True,
+        validators=[UniqueValidator(queryset=CustomUser.objects.all(), message="This email is already registered.")]
+    )
+    profile = ProfileSerializer(required=False)
+    
+    profile_name = serializers.CharField(
+        required=True,
+        validators=[UniqueValidator(queryset=CustomUser.objects.all(), message="This profile name is already taken.")]
+    )
+    
+    
     password1 = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True)
 
     class Meta:
         model = CustomUser
-        fields = ['profile_name', 'email', 'password1', 'password2']
+        fields = ['profile_name', 'email', 'password1', 'password2','profile']
 
-    def validate(self, data):
-        # Check if passwords match
+    def validate(self, data):        
         if data['password1'] != data['password2']:
             raise serializers.ValidationError({"password": "The two password fields didn't match."})
-
-        # Ensure the email is unique
-        if CustomUser.objects.filter(email=data['email']).exists():
-            raise serializers.ValidationError({"email": "This email is already registered."})
-
-        # Ensure the profile_name is unique
-        if CustomUser.objects.filter(profile_name=data['profile_name']).exists():
-            raise serializers.ValidationError({"profile_name": "This profile name is already taken."})
-
         return data
 
     def create(self, validated_data):
         try:
+            # Extract profile data if provided
+            profile_data = validated_data.pop('profile', None)
+            
+            # Create the user
             user = CustomUser(
                 email=validated_data['email'],
                 profile_name=validated_data['profile_name']
             )
             user.set_password(validated_data['password1'])
             user.save()
+
+            # Creating the profile if profile data is provided,if not then just associate the user with a profile
+            if profile_data:
+                Profile.objects.create(user=user, **profile_data)
+            else:
+                Profile.objects.create(user=user)  
+
             return user
         except IntegrityError:
             raise serializers.ValidationError({"profile_name": "This profile name is already taken."})
+
 
 # ------------------------------
 # User Serializer
