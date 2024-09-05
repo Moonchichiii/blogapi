@@ -1,15 +1,14 @@
-from django.db import models
+from django.db import models, IntegrityError
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 
-
-
-# Create your models here.
-
-
-
+# ------------------------------
+# Custom User Manager
+# ------------------------------
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, profile_name, password=None, **extra_fields):
-        """Create and return a regular user with an email and profile_name."""
+        """
+        Create and save a regular user with the given email, profile name, and password.
+        """
         if not email:
             raise ValueError('The Email field must be set')
         if not profile_name:
@@ -18,11 +17,16 @@ class CustomUserManager(BaseUserManager):
         email = self.normalize_email(email)
         user = self.model(email=email, profile_name=profile_name, **extra_fields)
         user.set_password(password)
-        user.save(using=self._db)
+        try:
+            user.save(using=self._db)
+        except IntegrityError:
+            raise IntegrityError("A user with this email or profile name already exists.")
         return user
 
     def create_superuser(self, email, profile_name, password=None, **extra_fields):
-        """Create and return a superuser."""
+        """
+        Create and save a superuser with the given email, profile name, and password.
+        """
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
 
@@ -33,9 +37,14 @@ class CustomUserManager(BaseUserManager):
 
         return self.create_user(email, profile_name, password, **extra_fields)
 
+
+# ------------------------------
+# Custom User Model
+# ------------------------------
 class CustomUser(AbstractUser):
     email = models.EmailField(unique=True)
     profile_name = models.CharField(max_length=255, unique=True)
+    username = None  
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['profile_name']
@@ -44,3 +53,9 @@ class CustomUser(AbstractUser):
 
     def __str__(self):
         return self.profile_name
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['email'], name='unique_email'),
+            models.UniqueConstraint(fields=['profile_name'], name='unique_profile_name'),
+        ]

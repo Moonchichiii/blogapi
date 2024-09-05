@@ -1,23 +1,25 @@
 from pathlib import Path
 from datetime import timedelta
-from decouple import config, Csv
+from decouple import config
 
-
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# --------------------------------------------------------
+# Base Directory
+# --------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
+# --------------------------------------------------------
+# Security Settings
+# --------------------------------------------------------
 SECRET_KEY = config('SECRET_KEY')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'localhost:5173']
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
 
+# --------------------------------------------------------
+# CORS Configuration
+# --------------------------------------------------------
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:8000',
     'http://127.0.0.1:8000',
@@ -25,10 +27,29 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 
+# --------------------------------------------------------
+# Site Configuration
+# --------------------------------------------------------
 SITE_ID = 1
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
+# --------------------------------------------------------
+# Email Configuration
+# --------------------------------------------------------
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = config('EMAIL_USER')
+EMAIL_HOST_PASSWORD = config('EMAIL_PASSWORD')
+DEFAULT_FROM_EMAIL = 'noreply@yourdomain.com'
+
+
+
+
+# --------------------------------------------------------
+# Authentication Settings
+# --------------------------------------------------------
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
@@ -37,27 +58,28 @@ AUTHENTICATION_BACKENDS = [
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
 
+# --------------------------------------------------------
+# Allauth Configuration
+# --------------------------------------------------------
 ACCOUNT_AUTHENTICATION_METHOD = 'email'
-ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
-ACCOUNT_CONFIRM_EMAIL_ON_GET = True
-ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
+ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 
+# Social Account Provider Configuration
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
-        'SCOPE': [
-            'profile',
-            'email',
-        ],
-        'AUTH_PARAMS': {
-            'access_type': 'online',
-        }
+        'SCOPE': ['profile', 'email'],
+        'AUTH_PARAMS': {'access_type': 'online'}
     }
 }
 
 
+# --------------------------------------------------------
+# REST Framework and JWT Settings
+# --------------------------------------------------------
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -76,7 +98,9 @@ SIMPLE_JWT = {
 }
 
 
-# Application definition
+# --------------------------------------------------------
+# Application Definition
+# --------------------------------------------------------
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -97,8 +121,10 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_filters', 
     'cloudinary_storage',
-    'cloudinary',
+    'cloudinary',    
     
+    
+    # Local apps
     'administration',
     'accounts',
     'profiles',
@@ -110,6 +136,9 @@ INSTALLED_APPS = [
 ]
 
 
+# --------------------------------------------------------
+# Middleware
+# --------------------------------------------------------
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -119,11 +148,19 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware'
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
+
+# --------------------------------------------------------
+# URL Configuration
+# --------------------------------------------------------
 ROOT_URLCONF = 'backend.urls'
 
+
+# --------------------------------------------------------
+# Template Configuration
+# --------------------------------------------------------
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -140,12 +177,16 @@ TEMPLATES = [
     },
 ]
 
+
+# --------------------------------------------------------
+# WSGI Configuration
+# --------------------------------------------------------
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-
+# --------------------------------------------------------
+# Database Configuration
+# --------------------------------------------------------
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -154,9 +195,9 @@ DATABASES = {
 }
 
 
-# Password validation
-# https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
-
+# --------------------------------------------------------
+# Password Validation
+# --------------------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -172,30 +213,52 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    }, 
+    },
 ]
 
 
-
-
+# --------------------------------------------------------
 # Internationalization
-# https://docs.djangoproject.com/en/5.0/topics/i18n/
-
+# --------------------------------------------------------
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.0/howto/static-files/
+# --------------------------------------------------------
+# Static Files
+# --------------------------------------------------------
+STATIC_URL = '/static/'
 
-STATIC_URL = 'static/'
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
-
+# --------------------------------------------------------
+# Default Primary Key Field Type
+# --------------------------------------------------------
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# --------------------------------------------------------
+# Logging Configuration
+# --------------------------------------------------------
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+        'file': {
+            'level': 'ERROR',
+            'class': 'logging.FileHandler',
+            'filename': 'error.log',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'ERROR',
+            'propagate': True,
+        },
+    },
+}
