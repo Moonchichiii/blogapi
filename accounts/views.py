@@ -26,7 +26,7 @@ CustomUser = get_user_model()
 # ------------------------------
 def activateEmail(request, user, to_email):
     mail_subject = 'Activate your user account.'
-    message = render_to_string('accounts/email_template.html', {
+    message = render_to_string('confirm_email.html', {
         'user': user,
         'domain': get_current_site(request).domain,
         'uid': urlsafe_base64_encode(force_bytes(user.pk)),
