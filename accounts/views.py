@@ -23,6 +23,7 @@ class RegisterView(APIView):
             self.send_activation_email(user, request)
             return Response({"message": "User registered. Please check your email to activate your account."}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
 
     def send_activation_email(self, user, request):
         token = account_activation_token.make_token(user)
