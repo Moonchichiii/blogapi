@@ -1,3 +1,4 @@
+from django_otp.plugins.otp_totp.models import TOTPDevice
 from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,12 +12,6 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from .serializers import UserSerializer
 from .tokens import account_activation_token
-
-from django_otp.plugins.otp_totp.models import TOTPDevice
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 
 
 User = get_user_model()
