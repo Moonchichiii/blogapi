@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.throttling import AnonRateThrottle
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
@@ -11,9 +12,21 @@ from django.utils.encoding import force_bytes, force_str
 from .serializers import UserSerializer
 from .tokens import account_activation_token
 
+from django_otp.plugins.otp_totp.models import TOTPDevice
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+
+
 User = get_user_model()
 
+class CustomAnonRateThrottle(AnonRateThrottle):
+    rate = '5/minute'
+
 class RegisterView(APIView):
+    throttle_classes = [CustomAnonRateThrottle]
+    
     def post(self, request):
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
@@ -36,7 +49,7 @@ class RegisterView(APIView):
             [user.email],
             fail_silently=False,
         )
-
+        
 class ActivateAccountView(APIView):
     permission_classes = [AllowAny]
 
@@ -54,7 +67,54 @@ class ActivateAccountView(APIView):
         else:
             return Response({"message": "Invalid activation link."}, status=status.HTTP_400_BAD_REQUEST)
 
+
+
+class ResendVerificationEmailView(APIView):
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email=email, is_active=False).first()
+        if not user:
+            return Response({'error': 'User not found or already verified'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Generate verification token
+        token = account_activation_token.make_token(user)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        activation_link = f"{request.scheme}://{request.get_host()}/api/accounts/activate/{uid}/{token}/"
+
+        # Send verification email
+        send_mail(
+            'Activate your account',
+            f'Click this link to activate your account: {activation_link}',
+            'noreply@yourdomain.com',
+            [user.email],
+            fail_silently=False,
+        )
+
+        return Response({'message': 'Verification email resent successfully'}, status=status.HTTP_200_OK)
+    
+class SetupTwoFactorView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        device, created = TOTPDevice.objects.get_or_create(user=user, name="default")
+        
+        if created:
+            device.save()
+
+        config_url = device.config_url
+
+        return Response({
+            'config_url': config_url,
+            'secret_key': device.key,
+        }, status=status.HTTP_200_OK)
+
+
 class LoginView(APIView):
+    throttle_classes = [CustomAnonRateThrottle]
     permission_classes = [AllowAny]
 
     def post(self, request):
