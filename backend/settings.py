@@ -10,11 +10,15 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
 
 # CORS Configuration
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  # or your frontend's URL
+]
+CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_CREDENTIALS = True
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
+FRONTEND_URL = 'http://localhost:5173'
 
 # Application Definition
 INSTALLED_APPS = [
@@ -36,8 +40,7 @@ INSTALLED_APPS = [
     'cloudinary_storage',
     'cloudinary',
 
-    # Local apps
-    'administration',
+    # Local apps    
     'accounts',
     'profiles',
     'posts',

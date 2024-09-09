@@ -12,6 +12,8 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from .serializers import UserSerializer
 from .tokens import account_activation_token
+from django.shortcuts import redirect
+from django.conf import settings
 
 
 User = get_user_model()
@@ -21,7 +23,7 @@ class CustomAnonRateThrottle(AnonRateThrottle):
 
 class RegisterView(APIView):
     throttle_classes = [CustomAnonRateThrottle]
-    
+   
     def post(self, request):
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
@@ -29,7 +31,10 @@ class RegisterView(APIView):
             user.is_active = False
             user.save()
             self.send_activation_email(user, request)
-            return Response({"message": "User registered. Please check your email to activate your account."}, status=status.HTTP_201_CREATED)
+            return Response({
+                "message": "User registered successfully. Please check your email to activate your account.",
+                "user_id": user.id
+            }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 
@@ -44,7 +49,6 @@ class RegisterView(APIView):
             [user.email],
             fail_silently=False,
         )
-        
 class ActivateAccountView(APIView):
     permission_classes = [AllowAny]
 
@@ -58,9 +62,19 @@ class ActivateAccountView(APIView):
         if user is not None and account_activation_token.check_token(user, token):
             user.is_active = True
             user.save()
-            return Response({"message": "Account activated successfully."}, status=status.HTTP_200_OK)
+            
+            # Generate tokens
+            refresh = RefreshToken.for_user(user)
+            
+            # Redirect to frontend with tokens and success status
+            redirect_url = (f"{settings.FRONTEND_URL}/activate/{uidb64}/{token}?"
+                            f"status=success&"
+                            f"access_token={str(refresh.access_token)}&"
+                            f"refresh_token={str(refresh)}")
+            return redirect(redirect_url)
         else:
-            return Response({"message": "Invalid activation link."}, status=status.HTTP_400_BAD_REQUEST)
+            # Redirect to frontend with an error parameter
+            return redirect(f"{settings.FRONTEND_URL}/activate/{uidb64}/{token}?status=error")
 
 
 

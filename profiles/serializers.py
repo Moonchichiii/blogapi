@@ -1,13 +1,35 @@
+# profiles/serializers.py
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from accounts.models import CustomUser
 from profiles.models import Profile
 
 class ProfileSerializer(serializers.ModelSerializer):
+    profile_name = serializers.CharField(source='user.profile_name', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    follower_count = serializers.IntegerField(read_only=True)
+    following_count = serializers.IntegerField(read_only=True)
+    popularity_score = serializers.FloatField(read_only=True)
+    is_following = serializers.SerializerMethodField()
+
     class Meta:
         model = Profile
-        fields = ['bio', 'location', 'birth_date']
-        read_only_fields = ['user']
+        fields = ['id', 'profile_name', 'email', 'bio', 'location', 'birth_date', 'image','follower_count', 'following_count', 'popularity_score', 'is_following']
+        read_only_fields = ['id', 'profile_name', 'email']
+        
+    def get_is_following(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.user.followers.filter(follower=request.user).exists()
+        return False
+
+    def update(self, instance, validated_data):
+        instance.bio = validated_data.get('bio', instance.bio)
+        instance.location = validated_data.get('location', instance.location)
+        instance.birth_date = validated_data.get('birth_date', instance.birth_date)
+        instance.image = validated_data.get('image', instance.image)
+        instance.save()
+        return instance
 
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(required=False)

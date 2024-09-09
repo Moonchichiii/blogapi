@@ -1,9 +1,11 @@
+from django.db.models import Count, Avg
 from rest_framework import generics, permissions
+from rest_framework.views import APIView
+from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .serializers import ProfileSerializer
 from .models import Profile
-from rest_framework.views import APIView
-from rest_framework.response import Response
+
 
 class CurrentUserProfileView(APIView):
     permission_classes = [IsAuthenticated]
@@ -23,12 +25,20 @@ class ProfileList(generics.ListAPIView):
     queryset = Profile.objects.all()
     serializer_class = ProfileSerializer
     permission_classes = [AllowAny]
+    
+    def get_queryset(self):
+        return Profile.objects.annotate(
+            follower_count=Count('user__followers'),
+            following_count=Count('user__following'),
+            avg_post_rating=Avg('user__posts__ratings__value')
+        ).order_by('-avg_post_rating', '-follower_count')
 
 class ProfileView(generics.RetrieveAPIView):
     queryset = Profile.objects.all()
     serializer_class = ProfileSerializer
     permission_classes = [AllowAny]
-    lookup_field = 'user__id'
+    lookup_field = 'user__id,user__profile_name'
+    
 
 class UpdateProfileView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
