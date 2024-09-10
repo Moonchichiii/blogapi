@@ -1,6 +1,9 @@
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
+import cloudinary
+import cloudinary.uploader
+from cloudinary.utils import cloudinary_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -11,10 +14,22 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
 
 # CORS Configuration
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # or your frontend's URL
+    "http://localhost:5173", 
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
@@ -45,7 +60,7 @@ INSTALLED_APPS = [
     'profiles',
     'posts',
     'comments',
-    'rating',
+    'ratings',
     'tags',
     'followers',
 ]
@@ -115,6 +130,15 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Cloudinary Configuration
+cloudinary.config( 
+    cloud_name = config('CLOUDINARY_CLOUD_NAME'),
+    api_key =  config('CLOUDINARY_API_KEY'),
+    api_secret = config('CLOUDINARY_API_SECRET'),
+    secure=True
+)
+
+
 # Internationalization
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
@@ -142,7 +166,12 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/day',
         'user': '1000/day'
-    }
+    },
+     'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
+    ],
 }
 
 # Simple JWT Settings

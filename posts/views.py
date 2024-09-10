@@ -10,7 +10,6 @@ from backend.permissions import IsOwnerOrReadOnly
 from tags.models import ProfileTag
 
 
-
 class PostList(generics.ListCreateAPIView):
     serializer_class = PostSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -22,18 +21,17 @@ class PostList(generics.ListCreateAPIView):
 
     def get_queryset(self):
         if self.request.user.is_staff or self.request.user.is_superuser:
-            return Post.objects.all()
-        return Post.objects.filter(is_approved=True)
-
-    def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+            queryset = Post.objects.all()
+        else:
+            queryset = Post.objects.filter(is_approved=True)
         
-    def get_queryset(self):
-        queryset = super().get_queryset()
         return queryset.annotate(
             average_rating=Avg('ratings__value'),
             total_ratings=Count('ratings')
         )
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
 
 class PostDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Post.objects.all()
@@ -48,23 +46,22 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
             serializer.save(is_approved=False)
         else:
             raise permissions.PermissionDenied("You don't have permission to edit this post.")
-    
+
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance)
         data = serializer.data
-        
+
         # Get tagged users for this post
         content_type = ContentType.objects.get_for_model(Post)
         tags = ProfileTag.objects.filter(content_type=content_type, object_id=instance.id)
         tagged_users = [tag.tagged_user.profile_name for tag in tags]
-        
+
         data['tagged_users'] = tagged_users
         return Response(data)
-    
+
     def get_queryset(self):
-        queryset = super().get_queryset()
-        return queryset.annotate(
+        return Post.objects.annotate(
             average_rating=Avg('ratings__value'),
             total_ratings=Count('ratings')
         )

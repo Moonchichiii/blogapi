@@ -1,4 +1,3 @@
-# profiles/serializers.py
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from accounts.models import CustomUser
@@ -14,8 +13,8 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Profile
-        fields = ['id', 'profile_name', 'email', 'bio', 'location', 'birth_date', 'image','follower_count', 'following_count', 'popularity_score', 'is_following']
-        read_only_fields = ['id', 'profile_name', 'email']
+        fields = ['id', 'bio', 'location', 'birth_date', 'image', 'follower_count', 'following_count', 'popularity_score']
+        read_only_fields = ['id', 'follower_count', 'following_count', 'popularity_score']
         
     def get_is_following(self, obj):
         request = self.context.get('request')
@@ -33,17 +32,21 @@ class ProfileSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(required=False)
+    email = serializers.EmailField(read_only=True)
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True)
 
     class Meta:
         model = CustomUser
-        fields = ('id', 'email', 'profile_name', 'password', 'password2', 'profile', 'is_staff', 'is_superuser')
+        fields = ('id', 'email', 'profile_name', 'profile', 'is_staff', 'is_superuser')
         read_only_fields = ['id', 'is_staff', 'is_superuser']
-        extra_kwargs = {
-            'email': {'required': True},
-            'profile_name': {'required': True}
-        }
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        if request and request.user != instance:
+            data.pop('email', None)
+        return data
 
     def validate(self, attrs):
         if attrs.get('password') != attrs.get('password2'):
