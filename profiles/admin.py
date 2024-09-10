@@ -4,8 +4,8 @@ from .models import Profile
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ['user', 'location', 'birth_date', 'follower_count', 'following_count', 'popularity_score', 'profile_image']
-    list_filter = ['location', 'birth_date']
+    list_display = ['user', 'follower_count', 'following_count', 'popularity_score', 'profile_image']
+    list_filter = ['user__is_active']    
     search_fields = ['user__profile_name', 'user__email', 'bio', 'location']
     readonly_fields = ['follower_count', 'following_count', 'popularity_score']
     fieldsets = [

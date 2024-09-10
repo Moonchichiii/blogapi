@@ -1,5 +1,4 @@
 from django.db import models
-from django.db.models import Avg, Count
 from django.conf import settings
 from cloudinary.models import CloudinaryField
 from django.core.exceptions import ValidationError
@@ -7,16 +6,21 @@ from django.core.exceptions import ValidationError
 class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
     bio = models.TextField(max_length=500, blank=True)
-    location = models.CharField(max_length=30, blank=True)
-    birth_date = models.DateField(null=True, blank=True)
     image = CloudinaryField('image', blank=True, null=True, 
-                            transformation={"format": "webp", "quality": "auto:eco", "crop": "limit", "width": 1000, "height": 1000})
-    
+                            folder="profiles",  # Store profile images in a separate folder
+                            transformation={
+                                "format": "webp",  # Ensure the format is WebP
+                                "quality": "auto:eco",  # Auto-adjust quality for optimization
+                                "crop": "limit",  # Limit the dimensions
+                                "width": 1000,  # Set max width
+                                "height": 1000  # Set max height
+                            })
+
     def clean(self):
         super().clean()
-        if self.image and self.image.size > 2 * 1024 * 1024:
+        if self.image and self.image.size > 2 * 1024 * 1024:  # Size limit check (2MB)
             raise ValidationError("Profile image must be less than 2MB.")
-        
+
     @property
     def follower_count(self):
         return self.user.followers.count()
@@ -31,8 +35,6 @@ class Profile(models.Model):
         avg_rating = posts.aggregate(Avg('ratings__value'))['ratings__value__avg'] or 0
         total_ratings = posts.aggregate(total_ratings=Count('ratings'))['total_ratings'] or 0
         follower_count = self.follower_count
-
-        # Calculate popularity score (you can adjust this formula as needed)
         score = (avg_rating * 0.4) + (total_ratings * 0.3) + (follower_count * 0.3)
         return round(score, 2)
 
