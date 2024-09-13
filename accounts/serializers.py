@@ -4,7 +4,7 @@ from .models import CustomUser
 from profiles.serializers import ProfileSerializer
 
 class UserSerializer(serializers.ModelSerializer):
-    profile = ProfileSerializer(read_only=True)  # Ensure profile is included
+    profile = ProfileSerializer(read_only=True) 
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True)
 

@@ -42,7 +42,10 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'cloudinary_storage',
     'django.contrib.staticfiles',
+    'cloudinary',
+
     'django_otp',
     'django_otp.plugins.otp_static',
     'django_otp.plugins.otp_totp',
@@ -52,8 +55,6 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'django_filters',
-    'cloudinary_storage',
-    'cloudinary',
 
     # Local apps    
     'accounts',
@@ -129,6 +130,9 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'accounts.password_validation.NumberValidator',
     },
 ]
+# Add these lines
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+STATICFILES_STORAGE = 'cloudinary_storage.storage.StaticHashedCloudinaryStorage'
 
 # Cloudinary Configuration
 cloudinary.config( 
@@ -137,6 +141,16 @@ cloudinary.config(
     api_secret = config('CLOUDINARY_API_SECRET'),
     secure=True
 )
+
+
+
+MEDIA_URL = '/media/'
+STATIC_URL = '/static/'
+
+# STATICFILES_DIRS = [
+#     BASE_DIR / 'static',
+# ]
+
 
 
 # Internationalization
@@ -172,7 +186,10 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.FormParser',
         'rest_framework.parsers.MultiPartParser',
     ],
+     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
+     'PAGE_SIZE': 10,
 }
+
 
 # Simple JWT Settings
 SIMPLE_JWT = {

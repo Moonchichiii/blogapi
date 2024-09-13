@@ -14,14 +14,22 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = ['id', 'bio', 'image', 'follower_count', 'following_count', 'popularity_score', 'is_following', 'profile_name', 'email']
         read_only_fields = ['id', 'follower_count', 'following_count', 'popularity_score', 'profile_name', 'email']
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        if instance.image:
+            representation['image'] = instance.image.url
+        return representation
+
     def get_is_following(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             return obj.user.followers.filter(follower=request.user).exists()
         return False
 
+
     def update(self, instance, validated_data):
         instance.bio = validated_data.get('bio', instance.bio)
-        instance.image = validated_data.get('image', instance.image)
+        if 'image' in validated_data:
+            instance.image = validated_data['image']
         instance.save()
         return instance

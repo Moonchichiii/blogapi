@@ -16,6 +16,12 @@ class PostSerializer(serializers.ModelSerializer):
         fields = ['id', 'author', 'author_name', 'title', 'content', 'image', 'created_at', 'updated_at', 'is_approved', 'tags', 'average_rating', 'total_ratings', 'user_rating']
         read_only_fields = ['id', 'author', 'author_name', 'created_at', 'updated_at', 'is_approved', 'tags', 'average_rating', 'total_ratings', 'user_rating']
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        if instance.image:
+            representation['image'] = instance.image.url
+        return representation
+
     def create(self, validated_data):
         validated_data['author'] = self.context['request'].user
         return super().create(validated_data)

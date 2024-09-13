@@ -9,7 +9,7 @@ class ProfileAdmin(admin.ModelAdmin):
     search_fields = ['user__profile_name', 'user__email', 'bio', 'location']
     readonly_fields = ['follower_count', 'following_count', 'popularity_score']
     fieldsets = [
-        ('User Information', {'fields': ['user', 'bio', 'location', 'birth_date']}),
+        ('User Information', {'fields': ['user', 'bio' ]}),
         ('Profile Image', {'fields': ['image']}),
         ('Statistics', {'fields': ['follower_count', 'following_count', 'popularity_score'], 'classes': ['collapse']}),
     ]
