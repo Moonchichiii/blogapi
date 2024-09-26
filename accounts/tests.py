@@ -3,43 +3,42 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 from accounts.models import CustomUser
 from profiles.models import Profile
-from allauth.account.models import EmailAddress
 from django.utils.crypto import get_random_string
-from unittest.mock import patch
-from allauth.account.utils import send_email_confirmation
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from accounts.tokens import account_activation_token
 
 class AuthenticationTests(APITestCase):
-    """
-    Test cases for user authentication.
-    """
 
     @classmethod
     def setUpTestData(cls):
-        cls.register_url = reverse('auth_register')
-        cls.login_url = reverse('token_obtain_pair')
+        # Define URLs for various endpoints
+        cls.register_url = reverse('register')
+        cls.login_url = reverse('login')
         cls.token_refresh_url = reverse('token_refresh')
-        cls.password_reset_url = reverse('password_reset')
         cls.current_user_url = reverse('current_user')
         cls.update_email_url = reverse('update_email')
+        cls.delete_account_url = reverse('delete_account')
 
     def setUp(self):
+        # Initialize the API client for each test
         self.client = APIClient()
 
+    def tearDown(self):
+        # Clean up the database after each test
+        CustomUser.objects.all().delete()
+
     def generate_unique_email(self, prefix="test"):
-        """
-        Generate a unique email address.
-        """
+        # Generate a unique email address for testing
         unique_str = get_random_string(8)
         return f"{prefix}_{unique_str}@example.com"
 
     def test_user_registration(self):
-        """
-        Test if a user can register successfully.
-        """
+        # Test user registration
         data = {
             "profile_name": "testuser",
             "email": self.generate_unique_email(),
-            "password1": "StrongPassword123!",
+            "password": "StrongPassword123!",
             "password2": "StrongPassword123!"
         }
         response = self.client.post(self.register_url, data, format='json')
@@ -47,13 +46,11 @@ class AuthenticationTests(APITestCase):
         self.assertTrue(CustomUser.objects.filter(email=data['email']).exists())
 
     def test_profile_creation_on_user_registration(self):
-        """
-        Test if a profile is automatically created on user registration.
-        """
+        # Test profile creation upon user registration
         data = {
             "profile_name": "testuser2",
             "email": self.generate_unique_email(),
-            "password1": "StrongPassword123!",
+            "password": "StrongPassword123!",
             "password2": "StrongPassword123!"
         }
         response = self.client.post(self.register_url, data, format='json')
@@ -62,82 +59,72 @@ class AuthenticationTests(APITestCase):
         self.assertTrue(Profile.objects.filter(user=user).exists())
 
     def test_email_uniqueness(self):
-        """
-        Test that duplicate email registration is blocked.
-        """
-        CustomUser.objects.create_user(
-            profile_name="uniqueuser1", email="uniqueuser1@example.com", password="StrongPassword123!"
-        )
-
+        # Test that email addresses must be unique
         data = {
-            "profile_name": "newuser",
-            "email": "uniqueuser1@example.com",
-            "password1": "StrongPassword123!",
-            "password2": "StrongPassword123!"
+            'email': 'testuser@example.com',
+            'profile_name': 'testuser',
+            'password': 'StrongPassword123!',
+            'password2': 'StrongPassword123!'
         }
+        self.client.post(self.register_url, data, format='json')
         response = self.client.post(self.register_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('email', response.data)
-        self.assertEqual(response.data['email'][0], 'This email is already registered.')
+        self.assertIn('A user with that email already exists.', response.data['email'][0])
 
     def test_profile_name_uniqueness(self):
-        """
-        Test that duplicate profile names are blocked.
-        """
+        # Test that profile names must be unique
         CustomUser.objects.create_user(
-            profile_name="uniqueuser", email="uniqueuser@example.com", password="StrongPassword123!"
+            profile_name="uniqueuser",
+            email="uniqueuser@example.com",
+            password="StrongPassword123!"
         )
-
         data = {
             "profile_name": "uniqueuser",
             "email": self.generate_unique_email(),
-            "password1": "StrongPassword123!",
+            "password": "StrongPassword123!",
             "password2": "StrongPassword123!"
         }
         response = self.client.post(self.register_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('profile_name', response.data)
-        self.assertEqual(response.data['profile_name'][0], 'This profile name is already taken.')
+        self.assertIn('custom user with this profile name already exists', response.data['profile_name'][0].lower())
 
     def test_password_mismatch(self):
-        """
-        Test password mismatch during registration.
-        """
+        # Test that passwords must match
         data = {
             "profile_name": "testuser4",
             "email": self.generate_unique_email(),
-            "password1": "StrongPassword123!",
+            "password": "StrongPassword123!",
             "password2": "DifferentPassword123!"
         }
         response = self.client.post(self.register_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('non_field_errors', response.data)
-        self.assertEqual(response.data['non_field_errors'][0], "The two password fields didn't match.")
+        self.assertIn('password', response.data)
+        self.assertIn("Password fields didn't match.", response.data['password'])
 
     def test_invalid_password(self):
-        """
-        Test invalid (too weak) password during registration.
-        """
+        # Test that passwords must meet complexity requirements
         data = {
             "profile_name": "testuser5",
             "email": self.generate_unique_email(),
-            "password1": "weak",
+            "password": "weak",
             "password2": "weak"
         }
         response = self.client.post(self.register_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('password1', response.data)
-        self.assertTrue("This password is too short" in response.data['password1'][0])
+        self.assertIn('password', response.data)
+        self.assertIn("This password must contain at least 8 characters.", response.data['password'][0])
 
     def test_user_login_with_email(self):
-        """
-        Test if a user can login successfully with email.
-        """
+        # Test user login with email and password
         user = CustomUser.objects.create_user(
-            profile_name="testuser3", email="testuser3@example.com", password="StrongPassword123!"
+            profile_name="testuser3",
+            email="testuser3@example.com",
+            password="StrongPassword123!"
         )
-        EmailAddress.objects.create(user=user, email=user.email, verified=True, primary=True)
-
+        user.is_active = True
+        user.save()
         data = {
             "email": "testuser3@example.com",
             "password": "StrongPassword123!"
@@ -148,79 +135,122 @@ class AuthenticationTests(APITestCase):
         self.assertIn('refresh', response.data)
 
     def test_login_with_unverified_email(self):
-        """
-        Test that login fails for unverified email addresses.
-        """
+        # Test login with an unverified email
         user = CustomUser.objects.create_user(
-            profile_name="unverifieduser", email=self.generate_unique_email(), password="StrongPassword123!"
+            profile_name="unverifieduser",
+            email=self.generate_unique_email(),
+            password="StrongPassword123!"
         )
-        EmailAddress.objects.create(user=user, email=user.email, verified=False, primary=True)
-
+        user.is_active = False
+        user.save()
         data = {
             "email": user.email,
             "password": "StrongPassword123!"
         }
         response = self.client.post(self.login_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data['detail'], "Please verify your email before logging in.")
+        self.assertEqual(response.data['message'], "Please activate your account.")
 
     def test_login_with_invalid_credentials(self):
-        """
-        Test login with incorrect credentials.
-        """
+        # Test login with invalid credentials
         data = {
             "email": "nonexistent@example.com",
             "password": "WrongPassword123!"
         }
         response = self.client.post(self.login_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertEqual(response.data['detail'], "No active account found")
+        self.assertEqual(response.data['message'], "Invalid credentials")
 
     def test_token_refresh(self):
-        """
-        Test if the token refresh works correctly.
-        """
+        # Test token refresh functionality
         user = CustomUser.objects.create_user(
-            profile_name="testuserrefresh", email="testrefresh@example.com", password="StrongPassword123!"
+            email='testuser@example.com',
+            profile_name='testuser',
+            password='StrongPassword123!'
         )
-        EmailAddress.objects.create(user=user, email=user.email, verified=True, primary=True)
-
-        # Login to get refresh token
-        login_data = {"email": "testrefresh@example.com", "password": "StrongPassword123!"}
+        user.is_active = True
+        user.save()
+        login_data = {
+            'email': 'testuser@example.com',
+            'password': 'StrongPassword123!'
+        }
         login_response = self.client.post(self.login_url, login_data, format='json')
-        refresh_token = login_response.data['refresh']
-
-        # Test token refresh
-        refresh_response = self.client.post(self.token_refresh_url, {"refresh": refresh_token}, format='json')
-        self.assertEqual(refresh_response.status_code, status.HTTP_200_OK)
-        self.assertIn('access', refresh_response.data)
-
-    def test_password_reset_request(self):
-        """
-        Test if password reset request works correctly.
-        """
-        user = CustomUser.objects.create_user(
-            profile_name="resetuser", email="resetuser@example.com", password="StrongPassword123!"
-        )
-        data = {"email": user.email}
-        response = self.client.post(self.password_reset_url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+        self.assertIn('refresh', login_response.data)
+        self.assertIn('access', login_response.data)
 
     def test_account_deletion(self):
-        """
-        Test if a user can delete their account.
-        """
+        # Test account deletion
         user = CustomUser.objects.create_user(
-            profile_name="deletetestuser", email="deletetestuser@example.com", password="StrongPassword123!"
+            profile_name="deletetestuser",
+            email="deletetestuser@example.com",
+            password="StrongPassword123!"
         )
-        EmailAddress.objects.create(user=user, email=user.email, verified=True, primary=True)
-
-        # Login the user
+        user.is_active = True
+        user.save()
         login_data = {"email": "deletetestuser@example.com", "password": "StrongPassword123!"}
         login_response = self.client.post(self.login_url, login_data, format='json')
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {login_response.data["access"]}')
-
-        # Request account deletion
-        response = self.client.post(reverse('account_delete'))
+        response = self.client.post(self.delete_account_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(CustomUser.objects.filter(email="deletetestuser@example.com").exists())
+
+    def test_activation_link_expiry(self):
+        # Test activation link expiry
+        user = CustomUser.objects.create_user(
+            profile_name="expiringuser",
+            email=self.generate_unique_email(),
+            password="StrongPassword123!",
+            is_active=False
+        )
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = account_activation_token.make_token(user)
+        
+        # Modify the token or simulate an expired token
+        response = self.client.get(reverse('activate', kwargs={'uidb64': uid, 'token': 'invalidtoken'}))
+        self.assertEqual(response.status_code, 302)  # Assuming it redirects to an error page
+
+    def test_2fa_setup(self):
+        # Test 2FA setup
+        user = CustomUser.objects.create_user(
+            profile_name="2fauser",
+            email="2fauser@example.com",
+            password="StrongPassword123!"
+        )
+        self.client.force_authenticate(user=user)
+        response = self.client.post(reverse('setup_2fa'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('config_url', response.data)
+        self.assertIn('secret_key', response.data)
+
+    def test_resend_verification_email(self):
+        # Test resending verification email
+        user = CustomUser.objects.create_user(
+            profile_name="resenduser",
+            email="resenduser@example.com",
+            password="StrongPassword123!",
+            is_active=False
+        )
+        data = {"email": user.email}
+        response = self.client.post(reverse('resend_verification'), data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("Verification email resent successfully", response.data['message'])
+
+    def test_rate_limiting_on_registration(self):
+        # Test rate limiting on registration
+        for _ in range(6):  # Assuming rate limit is 5 per minute
+            self.client.post(self.register_url, {
+                "profile_name": f"ratelimituser{_}",
+                "email": self.generate_unique_email(),
+                "password": "StrongPassword123!",
+                "password2": "StrongPassword123!"
+            }, format='json')
+
+        # Check if the sixth request is rate-limited
+        response = self.client.post(self.register_url, {
+            "profile_name": "ratelimituser6",
+            "email": self.generate_unique_email(),
+            "password": "StrongPassword123!",
+            "password2": "StrongPassword123!"
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)

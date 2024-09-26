@@ -1,5 +1,7 @@
 from django.db import models
 from django.conf import settings
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 
 class Follow(models.Model):
     follower = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='following', on_delete=models.CASCADE)
@@ -11,3 +13,8 @@ class Follow(models.Model):
 
     def __str__(self):
         return f"{self.follower.profile_name} follows {self.followed.profile_name}"
+
+@receiver(post_save, sender=Follow)
+@receiver(post_delete, sender=Follow)
+def update_profile_popularity_on_follow(sender, instance, **kwargs):
+    instance.followed.profile.update_popularity_score()

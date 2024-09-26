@@ -4,6 +4,10 @@ from decouple import config
 import cloudinary
 import cloudinary.uploader
 from cloudinary.utils import cloudinary_url
+import sys
+from celery.schedules import crontab
+
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -17,7 +21,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173", 
 ]
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_CREDENTIALS = True
+
 
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -45,6 +49,7 @@ INSTALLED_APPS = [
     'cloudinary_storage',
     'django.contrib.staticfiles',
     'cloudinary',
+    'django_celery_beat',
 
     'django_otp',
     'django_otp.plugins.otp_static',
@@ -56,7 +61,6 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_filters',
 
-    # Local apps    
     'accounts',
     'profiles',
     'posts',
@@ -72,6 +76,24 @@ LOGIN_REDIRECT_URL = 'two_factor:profile'
 TWO_FACTOR_PATCH_ADMIN = True
 
 
+
+if 'test' in sys.argv:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': 'redis://127.0.0.1:6379/1',
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            }
+        }
+    }
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -82,6 +104,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django.middleware.cache.UpdateCacheMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.cache.FetchFromCacheMiddleware',
 ]
 
 ROOT_URLCONF = 'backend.urls'
@@ -142,16 +167,12 @@ cloudinary.config(
     secure=True
 )
 
-
-
 MEDIA_URL = '/media/'
 STATIC_URL = '/static/'
 
 # STATICFILES_DIRS = [
 #     BASE_DIR / 'static',
 # ]
-
-
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'
@@ -165,29 +186,43 @@ STATIC_URL = '/static/'
 # Default Primary Key Field Type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Celery settings
+CELERY_BROKER_URL = 'redis://localhost:6379/1'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
+
+ELERY_BEAT_SCHEDULE = {
+    'update-popularity-scores': {
+        'task': 'profiles.tasks.update_all_popularity_scores',
+        'schedule': crontab(hour=0, minute=0),
+    },
+}
+
+
 # Custom User Model
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
 # REST Framework Settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',        
     ),
-     'DEFAULT_THROTTLE_CLASSES': [
+    'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle'
+        'rest_framework.throttling.UserRateThrottle',
+        # The CustomAnonRateThrottle set inside accounts.views module
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/day',
-        'user': '1000/day'
+        'anon': '100/day',  
+        'user': '1000/day',  
+        'custom_anon': '5/minute',  
     },
-     'DEFAULT_PARSER_CLASSES': [
+    'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
         'rest_framework.parsers.FormParser',
         'rest_framework.parsers.MultiPartParser',
     ],
-     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
-     'PAGE_SIZE': 10,
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
+    'PAGE_SIZE': 10,
 }
 
 

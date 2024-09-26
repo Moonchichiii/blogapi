@@ -2,7 +2,14 @@ from django.contrib.auth.base_user import BaseUserManager
 from django.utils.translation import gettext_lazy as _
 
 class CustomUserManager(BaseUserManager):
+    """
+    Custom manager for CustomUser model, handling user and superuser creation.
+    """
+
     def create_user(self, email, profile_name, password=None, **extra_fields):
+        """
+        Create and save a regular user with the given email, profile name, and password.
+        """
         if not email:
             raise ValueError(_('The Email field must be set'))
         if not profile_name:
@@ -15,7 +22,11 @@ class CustomUserManager(BaseUserManager):
         return user
 
     def create_superuser(self, email, profile_name, password=None, **extra_fields):
+        """
+        Create and save a superuser with the given email, profile name, and password.
+        """
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
 
+        # Create a superuser by reusing the create_user method
         return self.create_user(email, profile_name, password, **extra_fields)

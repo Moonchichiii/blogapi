@@ -4,6 +4,9 @@ from django.utils.translation import gettext_lazy as _
 from .managers import CustomUserManager
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
+    """
+    Custom user model where email is the unique identifier for authentication.
+    """
     email = models.EmailField(_('email address'), unique=True)
     profile_name = models.CharField(max_length=255, unique=True)
     is_staff = models.BooleanField(default=False)
@@ -16,6 +19,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     objects = CustomUserManager()
 
     def __str__(self):
+        """Return the email as the string representation of the user."""
         return self.email
 
     class Meta:

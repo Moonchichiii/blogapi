@@ -8,11 +8,11 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include(tf_urls)),
     path('api/accounts/', include('accounts.urls')),
-    path('api/profiles/', include('profiles.urls')),
+    path('api/', include('profiles.urls')),
     path('api/', include('posts.urls')),
-    path('api/comments/', include('comments.urls')),
-    path('api/ratings/', include('ratings.urls')),
-    path('api/tags/', include('tags.urls')),
+    path('api/', include('comments.urls')),
+    path('api/', include('ratings.urls')),
+    path('api/', include('tags.urls')),    
     path('api/followers/', include('followers.urls')),
 ]
 

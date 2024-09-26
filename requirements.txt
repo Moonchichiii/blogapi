@@ -21,3 +21,7 @@ whitenoise==6.7.0
 django-ratelimit==4.1.0
 phonenumbers
 django-two-factor-auth
+django-redis
+celery
+django-celery-beat
+redis

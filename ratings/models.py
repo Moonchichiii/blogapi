@@ -1,6 +1,8 @@
 from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 from posts.models import Post
 
 class Rating(models.Model):
@@ -12,6 +14,19 @@ class Rating(models.Model):
 
     class Meta:
         unique_together = ('user', 'post')
+        indexes = [
+            models.Index(fields=['post', 'value']),
+        ]
 
     def __str__(self):
         return f"{self.user.profile_name} rated {self.post.title} {self.value} stars"
+
+@receiver(post_save, sender=Rating)
+@receiver(post_delete, sender=Rating)
+def update_post_rating(sender, instance, **kwargs):
+    instance.post.update_rating_stats()
+
+@receiver(post_save, sender=Rating)
+@receiver(post_delete, sender=Rating)
+def update_profile_popularity(sender, instance, **kwargs):
+    instance.post.author.profile.update_popularity_score()

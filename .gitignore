@@ -182,3 +182,9 @@ Pipfile.lock
 /static/
 .env
 settings_production.py
+
+# Locust.io
+tests/locust/
+locustfile.py
+*.locust.py
+locustest.py

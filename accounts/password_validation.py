@@ -7,6 +7,7 @@ class MinimumLengthValidator:
         self.min_length = min_length
 
     def validate(self, password, user=None):
+        """Check if the password meets the minimum length requirement."""
         if len(password) < self.min_length:
             raise ValidationError(
                 _("This password must contain at least %(min_length)d characters."),
@@ -16,6 +17,7 @@ class MinimumLengthValidator:
 
 class SymbolValidator:
     def validate(self, password, user=None):
+        """Ensure the password contains at least one special symbol."""
         if not re.findall(r'[!@#$%^&*(),.?":{}|<>]', password):
             raise ValidationError(
                 _("The password must contain at least one symbol: !@#$%^&*(),.?\":{}|<>"),
@@ -24,6 +26,7 @@ class SymbolValidator:
 
 class UppercaseValidator:
     def validate(self, password, user=None):
+        """Require at least one uppercase letter in the password."""
         if not re.findall('[A-Z]', password):
             raise ValidationError(
                 _("The password must contain at least one uppercase letter, A-Z."),
@@ -32,9 +35,9 @@ class UppercaseValidator:
 
 class NumberValidator:
     def validate(self, password, user=None):
+        """Ensure the password includes at least one numeric digit."""
         if not re.findall('\d', password):
             raise ValidationError(
                 _("The password must contain at least one number, 0-9."),
                 code='password_no_number',
             )
-

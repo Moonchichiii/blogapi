@@ -1,44 +1,51 @@
+from django.shortcuts import redirect
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core.mail import send_mail
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.throttling import AnonRateThrottle
-from django.contrib.auth import get_user_model
-from django.core.mail import send_mail
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes, force_str
+
 from .serializers import UserSerializer
 from .tokens import account_activation_token
-from django.shortcuts import redirect
-from django.conf import settings
-
 
 User = get_user_model()
 
 class CustomAnonRateThrottle(AnonRateThrottle):
-    rate = '5/minute'
+    """
+    Custom rate throttle for anonymous users.
+    """
+    scope = 'custom_anon'
 
 class RegisterView(APIView):
+    """
+    Register a new user and send activation email.
+    """
     throttle_classes = [CustomAnonRateThrottle]
-   
+
     def post(self, request):
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
-            user = serializer.save()
-            user.is_active = False
-            user.save()
+            user = serializer.save(is_active=False)
             self.send_activation_email(user, request)
             return Response({
                 "message": "User registered successfully. Please check your email to activate your account.",
                 "user_id": user.id
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
 
-    def send_activation_email(self, user, request):
+    @staticmethod
+    def send_activation_email(user, request):
+        """
+        Send account activation email to the user.
+        """
         token = account_activation_token.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         activation_link = f"{request.scheme}://{request.get_host()}/api/accounts/activate/{uid}/{token}/"
@@ -49,7 +56,11 @@ class RegisterView(APIView):
             [user.email],
             fail_silently=False,
         )
+
 class ActivateAccountView(APIView):
+    """
+    Activate user account using the provided token.
+    """
     permission_classes = [AllowAny]
 
     def get(self, request, uidb64, token):
@@ -59,26 +70,20 @@ class ActivateAccountView(APIView):
         except (TypeError, ValueError, OverflowError, User.DoesNotExist):
             user = None
 
-        if user is not None and account_activation_token.check_token(user, token):
+        if user and account_activation_token.check_token(user, token):
             user.is_active = True
             user.save()
-            
-            # Generate tokens
             refresh = RefreshToken.for_user(user)
-            
-            # Redirect to frontend with tokens and success status
             redirect_url = (f"{settings.FRONTEND_URL}/activate/{uidb64}/{token}?"
-                            f"status=success&"
-                            f"access_token={str(refresh.access_token)}&"
-                            f"refresh_token={str(refresh)}")
+                            f"status=success&access_token={str(refresh.access_token)}&refresh_token={str(refresh)}")
             return redirect(redirect_url)
-        else:
-            # Redirect to frontend with an error parameter
-            return redirect(f"{settings.FRONTEND_URL}/activate/{uidb64}/{token}?status=error")
 
-
+        return redirect(f"{settings.FRONTEND_URL}/activate/{uidb64}/{token}?status=error")
 
 class ResendVerificationEmailView(APIView):
+    """
+    Resend account verification email.
+    """
     def post(self, request):
         email = request.data.get('email')
         if not email:
@@ -88,41 +93,27 @@ class ResendVerificationEmailView(APIView):
         if not user:
             return Response({'error': 'User not found or already verified'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Generate verification token
-        token = account_activation_token.make_token(user)
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        activation_link = f"{request.scheme}://{request.get_host()}/api/accounts/activate/{uid}/{token}/"
-
-        # Send verification email
-        send_mail(
-            'Activate your account',
-            f'Click this link to activate your account: {activation_link}',
-            'noreply@yourdomain.com',
-            [user.email],
-            fail_silently=False,
-        )
-
+        RegisterView.send_activation_email(user, request)
         return Response({'message': 'Verification email resent successfully'}, status=status.HTTP_200_OK)
-    
+
 class SetupTwoFactorView(APIView):
+    """
+    Setup two-factor authentication for the user.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         user = request.user
         device, created = TOTPDevice.objects.get_or_create(user=user, name="default")
-        
-        if created:
-            device.save()
-
-        config_url = device.config_url
-
         return Response({
-            'config_url': config_url,
+            'config_url': device.config_url,
             'secret_key': device.key,
         }, status=status.HTTP_200_OK)
 
-
 class LoginView(APIView):
+    """
+    Login user and return JWT tokens.
+    """
     throttle_classes = [CustomAnonRateThrottle]
     permission_classes = [AllowAny]
 
@@ -139,6 +130,9 @@ class LoginView(APIView):
         return Response({"message": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
 class CustomTokenRefreshView(TokenRefreshView):
+    """
+    Refresh JWT tokens and set them in cookies.
+    """
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
@@ -149,6 +143,9 @@ class CustomTokenRefreshView(TokenRefreshView):
         return response
 
 class UpdateEmailView(generics.UpdateAPIView):
+    """
+    Update the email address of the authenticated user.
+    """
     permission_classes = [IsAuthenticated]
     serializer_class = UserSerializer
 
@@ -156,13 +153,15 @@ class UpdateEmailView(generics.UpdateAPIView):
         return self.request.user
 
     def update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer = self.get_serializer(self.get_object(), data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         return Response(serializer.data)
 
 class LogoutView(APIView):
+    """
+    Logout the authenticated user and clear tokens.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -172,14 +171,19 @@ class LogoutView(APIView):
         return response
 
 class AccountDeletionView(APIView):
+    """
+    Delete the authenticated user's account.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        user = request.user
-        user.delete()
+        request.user.delete()
         return Response({"detail": "Account deleted successfully."}, status=status.HTTP_200_OK)
 
 class CurrentUserView(generics.RetrieveAPIView):
+    """
+    Retrieve the authenticated user's details.
+    """
     permission_classes = [IsAuthenticated]
     serializer_class = UserSerializer
 
