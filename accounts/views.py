@@ -110,7 +110,14 @@ class SetupTwoFactorView(APIView):
 
     def post(self, request):
         user = request.user
-        device, created = TOTPDevice.objects.get_or_create(user=user, name="default")
+        device = TOTPDevice.objects.filter(user=user, name="default").first()
+        if device:
+            return Response(
+                {'error': 'A 2FA device already exists.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        # Create a new TOTP device if none exists
+        device = TOTPDevice.objects.create(user=user, name="default")
         return Response({
             'config_url': device.config_url,
             'secret_key': device.key,
@@ -176,7 +183,7 @@ class LogoutView(APIView):
     """
     Logout the authenticated user by blacklisting the refresh token.
     """
-    permission_classes = [IsAuthenticated]
+    
 
     def post(self, request):
         refresh_token = request.data.get("refresh_token")

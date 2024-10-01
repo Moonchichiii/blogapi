@@ -1,15 +1,17 @@
 from django.contrib.auth.password_validation import validate_password
 from django.db import IntegrityError
+from django.db.models import Q
 from rest_framework import serializers
-
+import re
 from .models import CustomUser
 from profiles.serializers import ProfileSerializer
 
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for CustomUser model."""
-    email = serializers.EmailField(required=True)
+    email = serializers.EmailField(required=True, max_length=254)
     profile = ProfileSerializer(read_only=True)
+    profile_name = serializers.CharField(required=True, max_length=150)
     password = serializers.CharField(
         write_only=True, required=True, validators=[validate_password]
     )
@@ -35,8 +37,11 @@ class UserSerializer(serializers.ModelSerializer):
         return value
 
     def validate_profile_name(self, value):
-        """Validate that the profile name is unique."""
-        if CustomUser.objects.filter(profile_name=value).exists():
+        """Validate that the profile name is unique and contains only alphanumeric characters and underscores."""
+        if not re.match(r'^[a-zA-Z0-9_]+$', value):
+            raise serializers.ValidationError("Profile name can only contain letters, numbers, and underscores.")
+        # Perform a case-insensitive uniqueness check
+        if CustomUser.objects.filter(Q(profile_name__iexact=value)).exists():
             raise serializers.ValidationError("This profile name is already taken.")
         return value
 
