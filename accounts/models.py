@@ -1,7 +1,11 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.utils.translation import gettext_lazy as _
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework import exceptions
+
 from .managers import CustomUserManager
+
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
     """
@@ -19,7 +23,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     objects = CustomUserManager()
 
     def __str__(self):
-        """Return the email as the string representation of the user."""
         return self.email
 
     class Meta:
@@ -27,3 +30,30 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
             models.UniqueConstraint(fields=['email'], name='unique_email'),
             models.UniqueConstraint(fields=['profile_name'], name='unique_profile_name'),
         ]
+
+
+class CustomJWTAuthentication(JWTAuthentication):
+    """
+    Custom JWT authentication class that checks for blacklisted tokens.
+    """
+    def authenticate(self, request):
+        authentication_result = super().authenticate(request)
+        if authentication_result is not None:
+            user, validated_token = authentication_result
+            jti = validated_token.get('jti')
+            if BlacklistedAccessToken.objects.filter(jti=jti).exists():
+                raise exceptions.AuthenticationFailed(
+                    'Access token has been blacklisted', code='token_blacklisted'
+                )
+            return (user, validated_token)
+        return None
+
+
+class BlacklistedAccessToken(models.Model):
+    """
+    Model to store blacklisted access tokens.
+    """
+    jti = models.CharField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.jti

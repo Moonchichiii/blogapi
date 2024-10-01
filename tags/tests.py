@@ -9,9 +9,12 @@ from .models import ProfileTag
 
 User = get_user_model()
 
+
 class TagTests(APITestCase):
+    """Test suite for the ProfileTag API."""
 
     def setUp(self):
+        """Set up test data for the tests."""
         # Create users
         self.user = User.objects.create_user(
             email='testuser@example.com',
@@ -49,8 +52,8 @@ class TagTests(APITestCase):
         # Tag URL
         self.tag_url = reverse('create-profile-tag')
 
-    # Test 1: Create a tag for a post as an authenticated user
     def test_create_tag_for_post(self):
+        """Test creating a tag for a post as an authenticated user."""
         self.client.force_authenticate(user=self.user)
         data = {
             'tagged_user': self.other_user.id,
@@ -59,13 +62,12 @@ class TagTests(APITestCase):
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        
         self.assertEqual(ProfileTag.objects.count(), 1)
         self.assertEqual(ProfileTag.objects.first().tagged_user, self.other_user)
         self.client.force_authenticate(user=None)
 
-    # Test 2: Create a tag for a comment as an authenticated user
     def test_create_tag_for_comment(self):
+        """Test creating a tag for a comment as an authenticated user."""
         self.client.force_authenticate(user=self.user)
         data = {
             'tagged_user': self.other_user.id,
@@ -74,13 +76,12 @@ class TagTests(APITestCase):
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        # Verify the tag was created
         self.assertEqual(ProfileTag.objects.count(), 1)
         self.assertEqual(ProfileTag.objects.first().content_object, self.comment)
         self.client.force_authenticate(user=None)
 
-    # Test 3: Tagging yourself (Edge Case)
     def test_tagging_yourself(self):
+        """Test tagging yourself (Edge Case)."""
         self.client.force_authenticate(user=self.user)
         data = {
             'tagged_user': self.user.id,  # Tagging self
@@ -92,8 +93,8 @@ class TagTests(APITestCase):
         self.assertIn('You cannot tag yourself.', str(response.data))
         self.client.force_authenticate(user=None)
 
-    # Test 4: Create a tag for an invalid content type
     def test_create_tag_invalid_content_type(self):
+        """Test creating a tag for an invalid content type."""
         self.client.force_authenticate(user=self.user)
         data = {
             'tagged_user': self.other_user.id,
@@ -105,8 +106,8 @@ class TagTests(APITestCase):
         self.assertIn('Invalid content type', str(response.data))
         self.client.force_authenticate(user=None)
 
-    # Test 5: Create a tag for a non-existent object
     def test_create_tag_for_non_existent_object(self):
+        """Test creating a tag for a non-existent object."""
         self.client.force_authenticate(user=self.user)
         data = {
             'tagged_user': self.other_user.id,
@@ -118,8 +119,8 @@ class TagTests(APITestCase):
         self.assertIn('Invalid object', str(response.data))
         self.client.force_authenticate(user=None)
 
-    # Test 6: Duplicate tag for the same user on the same object (Edge Case)
     def test_duplicate_tag_for_same_object(self):
+        """Test creating a duplicate tag for the same user on the same object (Edge Case)."""
         self.client.force_authenticate(user=self.user)
         data = {
             'tagged_user': self.other_user.id,
@@ -134,8 +135,8 @@ class TagTests(APITestCase):
         self.assertIn('duplicate', str(response.data).lower())
         self.client.force_authenticate(user=None)
 
-    # Test 7: Create a tag as an unauthenticated user
     def test_create_tag_as_unauthenticated_user(self):
+        """Test creating a tag as an unauthenticated user."""
         data = {
             'tagged_user': self.other_user.id,
             'content_type': self.post_content_type.id,

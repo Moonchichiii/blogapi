@@ -1,15 +1,21 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
-from rest_framework.exceptions import NotFound
+from posts.models import Post
 from .models import Rating
 from .serializers import RatingSerializer
-from posts.models import Post
+
 
 class CreateUpdateRating(generics.CreateAPIView):
+    """
+    API view to create or update a rating for a post.
+    """
     serializer_class = RatingSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
+        """
+        Handle the creation or update of a rating.
+        """
         user = request.user
         post_id = request.data.get('post')
 
@@ -33,4 +39,7 @@ class CreateUpdateRating(generics.CreateAPIView):
         return Response(serializer.data, status=status_code, headers=headers)
 
     def perform_create(self, serializer):
+        """
+        Save the rating instance with the current user.
+        """
         serializer.save(user=self.request.user)

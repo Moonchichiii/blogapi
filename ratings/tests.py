@@ -7,9 +7,12 @@ from posts.models import Post
 
 User = get_user_model()
 
+
 class RatingTests(APITestCase):
+    """Test suite for the Rating model."""
 
     def setUp(self):
+        """Set up test dependencies."""
         self.client = APIClient()
         self.user = User.objects.create_user(
             email='testuser@example.com',
@@ -37,6 +40,7 @@ class RatingTests(APITestCase):
         self.rating_url = reverse('create-update-rating')
 
     def test_create_rating(self):
+        """Test creating a rating."""
         self.client.force_authenticate(user=self.user)
         data = {'post': self.post.id, 'value': 4}
         response = self.client.post(self.rating_url, data)
@@ -46,11 +50,13 @@ class RatingTests(APITestCase):
         self.client.force_authenticate(user=None)
 
     def test_create_rating_as_unauthenticated_user(self):
+        """Test creating a rating as an unauthenticated user."""
         data = {'post': self.post.id, 'value': 4}
         response = self.client.post(self.rating_url, data)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_update_rating(self):
+        """Test updating a rating."""
         self.client.force_authenticate(user=self.user)
         data = {'post': self.post.id, 'value': 3}
         self.client.post(self.rating_url, data)
@@ -61,6 +67,7 @@ class RatingTests(APITestCase):
         self.client.force_authenticate(user=None)
 
     def test_create_rating_for_non_existent_post(self):
+        """Test creating a rating for a non-existent post."""
         self.client.force_authenticate(user=self.user)
         data = {'post': 999, 'value': 4}
         response = self.client.post(self.rating_url, data)
@@ -69,6 +76,7 @@ class RatingTests(APITestCase):
         self.client.force_authenticate(user=None)
 
     def test_create_rating_below_min_value(self):
+        """Test creating a rating below the minimum value."""
         self.client.force_authenticate(user=self.user)
         data = {'post': self.post.id, 'value': 0}
         response = self.client.post(self.rating_url, data)
@@ -76,6 +84,7 @@ class RatingTests(APITestCase):
         self.client.force_authenticate(user=None)
 
     def test_create_rating_above_max_value(self):
+        """Test creating a rating above the maximum value."""
         self.client.force_authenticate(user=self.user)
         data = {'post': self.post.id, 'value': 6}
         response = self.client.post(self.rating_url, data)
@@ -83,6 +92,7 @@ class RatingTests(APITestCase):
         self.client.force_authenticate(user=None)
 
     def test_create_rating_for_another_user_post(self):
+        """Test creating a rating for another user's post."""
         self.client.force_authenticate(user=self.other_user)
         data = {'post': self.post.id, 'value': 5}
         response = self.client.post(self.rating_url, data)
@@ -93,6 +103,7 @@ class RatingTests(APITestCase):
         self.client.force_authenticate(user=None)
 
     def test_duplicate_rating_same_user(self):
+        """Test creating a duplicate rating by the same user."""
         self.client.force_authenticate(user=self.user)
         data = {'post': self.post.id, 'value': 3}
         self.client.post(self.rating_url, data)
@@ -102,3 +113,14 @@ class RatingTests(APITestCase):
         self.assertEqual(Rating.objects.count(), 1)
         self.assertEqual(Rating.objects.first().value, 4)
         self.client.force_authenticate(user=None)
+        
+    def test_rating_updates_post_and_profile(self):
+        self.client.force_authenticate(user=self.user)
+        post = Post.objects.create(author=self.other_user, title="Test Post", content="Test content")
+        data = {"post": post.id, "value": 4}
+        response = self.client.post(reverse('create-update-rating'), data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        post.refresh_from_db()
+        self.other_user.profile.refresh_from_db()
+        self.assertEqual(post.average_rating, 4.0)
+        self.assertGreater(self.other_user.profile.popularity_score, 0)

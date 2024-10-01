@@ -5,11 +5,18 @@ from django.core.exceptions import ObjectDoesNotExist
 from .models import ProfileTag
 from .serializers import ProfileTagSerializer
 
+
 class CreateProfileTag(generics.CreateAPIView):
+    """
+    API view to create a ProfileTag.
+    """
     serializer_class = ProfileTagSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
+        """
+        Handle the creation of a ProfileTag.
+        """
         serializer = self.get_serializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)
@@ -19,10 +26,19 @@ class CreateProfileTag(generics.CreateAPIView):
         except ValidationError as e:
             error_msg = str(e.detail[0]) if isinstance(e.detail, list) else str(e.detail)
             if "Invalid content type" in error_msg or "does not exist" in error_msg:
-                return Response({"error": "Invalid content type for tagging."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": "Invalid content type for tagging."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             elif "already tagged" in error_msg or "unique set" in error_msg:
-                return Response({"error": "Duplicate tag: You have already tagged this user on this object."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": "Duplicate tag: You have already tagged this user on this object."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             else:
                 return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
         except ObjectDoesNotExist:
-            return Response({"error": "Invalid content type for tagging."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Invalid content type for tagging."},
+                status=status.HTTP_400_BAD_REQUEST
+            )

@@ -188,3 +188,4 @@ tests/locust/
 locustfile.py
 *.locust.py
 locustest.py
+locustfile.py

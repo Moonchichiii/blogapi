@@ -1,0 +1,37 @@
+[run]
+source = .
+omit =
+    */migrations/*
+    */tests/*
+    */admin.py
+    */apps.py
+    */urls.py
+    */wsgi.py
+    */asgi.py
+    manage.py
+    */settings.py    
+    */migrations/*
+    */tests.py
+    */settings.py
+    */settings_production.py
+    */wsgi.py
+    */asgi.py
+    */locustfile.py
+
+    */__init__.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __str__
+    def __repr__
+    if self.debug:
+    if __name__ == .__main__.:
+    raise NotImplementedError
+    pass
+    except ImportError:
+    def setUp
+    def tearDown
+
+[html]
+directory = htmlcov

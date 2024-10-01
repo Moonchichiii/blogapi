@@ -5,11 +5,30 @@ from cloudinary.models import CloudinaryField
 from django.contrib.contenttypes.fields import GenericRelation
 from tags.models import ProfileTag
 
+
 class Post(models.Model):
-    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='posts')
+    """
+    Model representing a blog post.
+    """
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        related_name='posts'
+    )
     title = models.CharField(max_length=200)
     content = models.TextField()
-    image = CloudinaryField('image', blank=True, null=True, transformation={"format": "webp", "quality": "auto:eco", "crop": "limit", "width": 2000, "height": 2000})
+    image = CloudinaryField(
+        'image', 
+        blank=True, 
+        null=True, 
+        transformation={
+            "format": "webp", 
+            "quality": "auto:eco", 
+            "crop": "limit", 
+            "width": 2000, 
+            "height": 2000
+        }
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_approved = models.BooleanField(default=False)
@@ -21,6 +40,9 @@ class Post(models.Model):
         return self.title
 
     def update_rating_stats(self):
+        """
+        Update the average rating and total ratings for the post.
+        """
         stats = self.ratings.aggregate(
             avg_rating=Avg('value'),
             total_ratings=Count('id')
@@ -30,7 +52,13 @@ class Post(models.Model):
         self.save(update_fields=['average_rating', 'total_ratings'])
 
     def get_average_rating(self):
+        """
+        Get the average rating of the post.
+        """
         return self.average_rating
 
     def get_total_ratings(self):
+        """
+        Get the total number of ratings for the post.
+        """
         return self.total_ratings

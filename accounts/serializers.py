@@ -1,19 +1,25 @@
 from django.db import IntegrityError
-from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
+from rest_framework import serializers
+
 from .models import CustomUser
 from profiles.serializers import ProfileSerializer
+
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for CustomUser model."""
     email = serializers.EmailField(required=True)
     profile = ProfileSerializer(read_only=True)
-    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    password = serializers.CharField(
+        write_only=True, required=True, validators=[validate_password]
+    )
     password2 = serializers.CharField(write_only=True, required=True)
 
     class Meta:
         model = CustomUser
-        fields = ('id', 'email', 'profile_name', 'profile', 'is_staff', 'is_superuser', 'password', 'password2')
+        fields = (
+            'id', 'email', 'profile_name', 'profile', 'is_staff', 'is_superuser', 'password', 'password2'
+        )
         read_only_fields = ['id', 'is_staff', 'is_superuser']
 
     def to_representation(self, instance):
@@ -56,7 +62,8 @@ class UserSerializer(serializers.ModelSerializer):
             return user
         except IntegrityError as e:
             error_message = str(e).lower()
-            if 'unique_profile_name' in error_message or 'duplicate key value violates unique constraint' in error_message:
+            if 'unique_profile_name' in error_message or \
+               'duplicate key value violates unique constraint' in error_message:
                 raise serializers.ValidationError({'profile_name': 'This profile name is already taken.'})
             elif 'unique_email' in error_message:
                 raise serializers.ValidationError({'email': 'A user with that email already exists.'})
