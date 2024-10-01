@@ -19,10 +19,8 @@ from .tokens import account_activation_token
 
 User = get_user_model()
 
-
 class AuthRateThrottle(AnonRateThrottle):
     scope = 'auth'
-
 
 class RegisterView(APIView):
     """

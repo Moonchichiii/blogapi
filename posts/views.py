@@ -30,43 +30,38 @@ class PostList(generics.ListCreateAPIView):
     pagination_class = LimitOffsetPagination
 
     def get_queryset(self):
-        """
-        Optionally restricts the returned posts to a given user,
-        by filtering against a `author` query parameter in the URL.
-        """
         queryset = Post.objects.select_related('author').prefetch_related(
             'tags', 'comments__author', 'ratings__user'
         )
         author = self.request.query_params.get('author', None)
+        is_approved = self.request.query_params.get('is_approved', None)
+        search_query = self.request.query_params.get('search', None)
+
+        if is_approved:
+            queryset = queryset.filter(is_approved=is_approved)
+        if search_query:
+            queryset = queryset.filter(Q(title__icontains=search_query) | Q(content__icontains=search_query))
+        
         if self.request.user.is_authenticated:
             if author == 'current':
-                return queryset.filter(author=self.request.user)
-            elif self.request.user.is_staff or self.request.user.is_superuser:
-                return queryset
-            else:
-                return queryset.filter(Q(is_approved=True) | Q(author=self.request.user))
+                queryset = queryset.filter(author=self.request.user)
+            elif not (self.request.user.is_staff or self.request.user.is_superuser):
+                queryset = queryset.filter(Q(is_approved=True) | Q(author=self.request.user))
         else:
-            return queryset.filter(is_approved=True)
+            queryset = queryset.filter(is_approved=True)
+
+        return queryset
 
     def get_serializer_class(self):
-        """
-        Return the class to use for the serializer.
-        """
         if not self.request.user.is_authenticated:
             return LimitedPostSerializer
         return PostSerializer
 
     def perform_create(self, serializer):
-        """
-        Save the post with the current user as the author.
-        """
         serializer.save(author=self.request.user)
 
     @method_decorator(cache_page(60 * 5))
     def get(self, request, *args, **kwargs):
-        """
-        Cache the GET request for 5 minutes.
-        """
         return super().get(request, *args, **kwargs)
 
 
@@ -76,13 +71,15 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
     """
     queryset = Post.objects.all()
     serializer_class = PostSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
+    def check_object_permissions(self, request, obj):
+        if request.method in ['PUT', 'PATCH'] and request.user.is_staff:
+            return True
+        return super().check_object_permissions(request, obj)
+
     def perform_update(self, serializer):
-        """
-        Update the post instance.
-        """
         user = self.request.user
         if user.is_staff or user.is_superuser:
             serializer.save()
@@ -91,11 +88,15 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
         else:
             raise permissions.PermissionDenied("You don't have permission to edit this post.")
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if request.user == instance.author or request.user.is_superuser:
+            self.perform_destroy(instance)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response({"detail": "You do not have permission to delete this post."}, status=status.HTTP_403_FORBIDDEN)
+
     @method_decorator(cache_page(60 * 5))
     def retrieve(self, request, *args, **kwargs):
-        """
-        Cache the retrieve request for 5 minutes and add tagged users to the response.
-        """
         instance = self.get_object()
         serializer = self.get_serializer(instance)
         data = serializer.data
@@ -115,9 +116,6 @@ class ApprovePost(generics.UpdateAPIView):
     permission_classes = [permissions.IsAdminUser]
 
     def perform_update(self, serializer):
-        """
-        Approve the post instance.
-        """
         serializer.save(is_approved=True)
 
 
@@ -128,9 +126,6 @@ class DisapprovePost(APIView):
     permission_classes = [permissions.IsAdminUser]
 
     def post(self, request, pk):
-        """
-        Disapprove the post and send an email to the author with the reason.
-        """
         post = Post.objects.get(pk=pk)
         reason = request.data.get('reason')
         if not reason:

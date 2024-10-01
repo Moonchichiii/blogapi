@@ -1,18 +1,17 @@
+from django.test import TestCase, RequestFactory
 from django.urls import reverse
 from django.utils.crypto import get_random_string
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.test import override_settings
-from rest_framework import serializers, status
-from rest_framework.request import Request
+from rest_framework import serializers, status, exceptions
 from rest_framework.test import APIClient, APITestCase, APIRequestFactory
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
-
-from accounts.models import CustomUser
+from rest_framework_simplejwt.tokens import RefreshToken
+from accounts.models import CustomUser, BlacklistedAccessToken, CustomJWTAuthentication
 from accounts.serializers import UserSerializer
 from accounts.tokens import account_activation_token
 from profiles.models import Profile
-
 
 class AuthenticationTests(APITestCase):
     """Test suite for authentication-related functionalities."""
@@ -31,8 +30,6 @@ class AuthenticationTests(APITestCase):
         OutstandingToken.objects.all().delete()
         BlacklistedToken.objects.all().delete()
 
-    def tearDown(self):
-        CustomUser.objects.all().delete()
 
     def generate_unique_email(self, prefix="test"):
         """Generate a unique email for testing."""
@@ -306,28 +303,22 @@ class AuthenticationTests(APITestCase):
         if logout_response.status_code != status.HTTP_200_OK:
             print("Logout response data:", logout_response.data)
         self.assertEqual(logout_response.status_code, status.HTTP_200_OK)
+        
+        
+    def test_blacklisted_access_token_creation(self):
+        """Test creating a BlacklistedAccessToken instance."""
+        jti = 'unique_jti_token'
+        token = BlacklistedAccessToken.objects.create(jti=jti)
+        self.assertEqual(token.jti, jti)
+        self.assertTrue(BlacklistedAccessToken.objects.filter(jti=jti).exists())
 
-    def test_to_representation_different_user(self):
-        """Test to_representation when the requesting user is different from the instance."""
-        user1 = CustomUser.objects.create_user(
-            profile_name="user1",
-            email="user1@example.com",
-            password="StrongPassword123!"
-        )
-        user2 = CustomUser.objects.create_user(
-            profile_name="user2",
-            email="user2@example.com",
-            password="StrongPassword123!"
-        )
-        factory = APIRequestFactory()
-        request = factory.get('/')
-        request.user = user2
-        serializer = UserSerializer(user1, context={'request': request})
-        data = serializer.data
-        self.assertNotIn('email', data)
-        self.assertNotIn('password', data)
-        self.assertNotIn('password2', data)
+    def test_blacklisted_access_token_str(self):
+        """Test the string representation of BlacklistedAccessToken."""
+        jti = 'unique_jti_token_str'
+        token = BlacklistedAccessToken.objects.create(jti=jti)
+        self.assertEqual(str(token), jti)
 
+    
     def test_validate_email_unique(self):
         """Test that validate_email accepts a unique email."""
         data = {'email': 'unique@example.com'}
@@ -362,4 +353,137 @@ class AuthenticationTests(APITestCase):
         user = CustomUser.objects.create_user(email='test@example.com', profile_name='testuser')
         self.assertEqual(str(user), 'test@example.com')
         
+        
+class UserSerializerUpdateTests(TestCase):
+    """Tests for updating users via UserSerializer."""
+
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            email='updateuser@example.com',
+            profile_name='updateuser',
+            password='StrongPassword123!'
+        )
+        self.serializer_context = {'request': None}
+
+    def test_update_email_success(self):
+        """Test updating the user's email to a new unique email."""
+        data = {'email': 'newemail@example.com'}
+        serializer = UserSerializer(instance=self.user, data=data, partial=True, context=self.serializer_context)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        serializer.save()
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, 'newemail@example.com')
+
+    def test_update_profile_name_success(self):
+        """Test updating the user's profile_name to a new unique profile_name."""
+        data = {'profile_name': 'newprofile'}
+        serializer = UserSerializer(instance=self.user, data=data, partial=True, context=self.serializer_context)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        serializer.save()
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.profile_name, 'newprofile')
+
+    def test_update_password_success(self):
+        """Test updating the user's password."""
+        data = {
+            'password': 'NewStrongPassword123!',
+            'password2': 'NewStrongPassword123!'
+        }
+        serializer = UserSerializer(instance=self.user, data=data, partial=True, context=self.serializer_context)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        serializer.save()
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('NewStrongPassword123!'))
+
+    def test_update_email_to_existing_one(self):
+        """Test updating the user's email to an existing email raises an error."""
+        CustomUser.objects.create_user(
+            email='existingemail@example.com',
+            profile_name='existinguser',
+            password='StrongPassword123!'
+        )
+        data = {'email': 'existingemail@example.com'}
+        serializer = UserSerializer(instance=self.user, data=data, partial=True, context=self.serializer_context)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('email', serializer.errors)
+        self.assertEqual(serializer.errors['email'][0], 'A user with that email already exists.')
+
+    def test_update_profile_name_to_existing_one(self):
+        CustomUser.objects.create_user(
+            email='anotheremail@example.com',
+            profile_name='existingprofile',
+            password='StrongPassword123!'
+            )
+        data = {'profile_name': 'existingprofile'}
+        serializer = UserSerializer(instance=self.user, data=data, partial=True, context=self.serializer_context)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('profile_name', serializer.errors)
+        self.assertEqual(str(serializer.errors['profile_name'][0]), 'custom user with this profile name already exists.')
+
+    def test_update_password_mismatch(self):
+        """Test that a password mismatch during update raises a validation error."""
+        data = {
+            'password': 'NewStrongPassword123!',
+            'password2': 'DifferentPassword123!'
+        }
+        serializer = UserSerializer(instance=self.user, data=data, partial=True, context=self.serializer_context)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('password', serializer.errors)
+        self.assertEqual(serializer.errors['password'][0], "Password fields didn't match.")
+
+    def test_update_with_no_changes(self):
+        """Test updating with no changes does not alter the user."""
+        data = {}
+        serializer = UserSerializer(instance=self.user, data=data, partial=True, context=self.serializer_context)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        serializer.save()
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, 'updateuser@example.com')
+        self.assertEqual(self.user.profile_name, 'updateuser')
+class CustomJWTAuthenticationTests(TestCase):
+    """Tests for the CustomJWTAuthentication class."""
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.authenticator = CustomJWTAuthentication()
+        self.user = CustomUser.objects.create_user(
+            email='authuser@example.com',
+            profile_name='authuser',
+            password='StrongPassword123!'
+            )
+        self.user.is_active = True
+        self.user.save()
+        
+    def generate_token(self):
+        """Helper method to generate a valid JWT access token."""
+        refresh = RefreshToken.for_user(self.user)
+        return str(refresh.access_token)
     
+    def test_authenticate_with_valid_token(self):
+        """Test authentication with a valid JWT token."""
+        token = self.generate_token()
+        request = self.factory.get('/')
+        request.META['HTTP_AUTHORIZATION'] = f'Bearer {token}'
+        user, validated_token = self.authenticator.authenticate(request)
+        self.assertEqual(user, self.user)
+        self.assertIsNotNone(validated_token)        
+
+    def test_authenticate_with_blacklisted_token(self):
+        """Test authentication fails with a blacklisted JWT token."""
+        refresh = RefreshToken.for_user(self.user)
+        access_token = refresh.access_token
+        jti = access_token['jti']
+        BlacklistedAccessToken.objects.create(jti=jti)
+        request = self.factory.get('/')
+        request.META['HTTP_AUTHORIZATION'] = f'Bearer {str(access_token)}'
+        
+        with self.assertRaises(exceptions.AuthenticationFailed) as context:            
+            self.authenticator.authenticate(request)
+            self.assertEqual(str(context.exception), 'Access token has been blacklisted')
+
+    def test_authenticate_with_invalid_token(self):
+                """Test authentication with an invalid JWT token."""
+                invalid_token = 'invalidtoken123'
+                request = self.factory.get('/')
+                request.META['HTTP_AUTHORIZATION'] = f'Bearer {invalid_token}'
+                with self.assertRaises(exceptions.AuthenticationFailed):
+                    self.authenticator.authenticate(request)

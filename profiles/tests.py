@@ -1,15 +1,17 @@
-
 from django.urls import reverse
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 from rest_framework.throttling import UserRateThrottle
-from accounts.models import CustomUser
-from profiles.models import Profile
 from django.utils.crypto import get_random_string
 from unittest.mock import patch
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.exceptions import ValidationError
+from django.contrib.auth import get_user_model
+from profiles.models import Profile
+from profiles.tasks import update_all_popularity_scores
+
+CustomUser = get_user_model()
 
 
 class TestThrottle(UserRateThrottle):
@@ -224,12 +226,16 @@ class ProfileTasksTest(TestCase):
     @patch('profiles.models.Profile.update_popularity_score')
     def test_update_all_popularity_scores(self, mock_update):
         """Test that the update_all_popularity_scores task updates all profiles."""
-        Profile.objects.create(user=CustomUser.objects.create(email='user1@example.com', profile_name='user1'))
-        Profile.objects.create(user=CustomUser.objects.create(email='user2@example.com', profile_name='user2'))
+        # Create users (profiles will be created automatically via signals)
+        user1 = CustomUser.objects.create(email='user1@example.com', profile_name='user1')
+        user2 = CustomUser.objects.create(email='user2@example.com', profile_name='user2')
+
+        # Ensure profiles exist
+        self.assertTrue(Profile.objects.filter(user=user1).exists())
+        self.assertTrue(Profile.objects.filter(user=user2).exists())
 
         # Call the task
         update_all_popularity_scores()
 
         # Assert that the update method was called for each profile
         self.assertEqual(mock_update.call_count, Profile.objects.count())
-

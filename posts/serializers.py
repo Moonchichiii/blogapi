@@ -1,13 +1,12 @@
+from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
-from .models import Post
-from tags.serializers import ProfileTagSerializer
+
+from accounts.models import CustomUser
+from comments.serializers import CommentSerializer
 from ratings.models import Rating
 from ratings.serializers import RatingSerializer
-from comments.serializers import CommentSerializer
-
-from django.contrib.contenttypes.models import ContentType
 from tags.models import ProfileTag
-from accounts.models import CustomUser
+from .models import Post
 
 
 class LimitedPostSerializer(serializers.ModelSerializer):
@@ -15,7 +14,6 @@ class LimitedPostSerializer(serializers.ModelSerializer):
     Serializer for limited post details.
     """
     author_name = serializers.CharField(source='author.profile_name', read_only=True)
-    
 
     class Meta:
         model = Post
@@ -67,17 +65,16 @@ class PostSerializer(serializers.ModelSerializer):
         else:
             self.fields['is_approved'].read_only = False
 
-    def perform_update(self, serializer):
+    def update(self, instance, validated_data):
         """
-        Custom update behavior based on user permissions.
+        Update the post instance.
         """
-        user = self.context.get('request').user
+        user = self.context['request'].user
         if user.is_staff or user.is_superuser:
-            serializer.save()
-        elif user == serializer.instance.author:
-            instance = serializer.save()
-            instance.is_approved = False
-            instance.save(update_fields=['is_approved'])
+            return super().update(instance, validated_data)
+        elif user == instance.author:
+            validated_data['is_approved'] = False
+            return super().update(instance, validated_data)
         else:
             raise serializers.ValidationError("You don't have permission to edit this post.")
 
@@ -91,10 +88,16 @@ class PostSerializer(serializers.ModelSerializer):
         return representation
 
     def create(self, validated_data):
+        """
+        Create a new post instance.
+        """
         tags_data = validated_data.pop('tags', [])
+        if len(tags_data) != len(set(tags_data)):
+            raise serializers.ValidationError({'tags': 'Duplicate tags are not allowed'})
+
         post = Post.objects.create(**validated_data)
-        
         content_type = ContentType.objects.get_for_model(Post)
+
         for tag_name in tags_data:
             tagged_user = CustomUser.objects.filter(profile_name=tag_name).first()
             if tagged_user:
