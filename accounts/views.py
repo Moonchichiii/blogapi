@@ -16,6 +16,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from .serializers import UserSerializer
 from .tokens import account_activation_token
+from .messages import STANDARD_MESSAGES
 
 User = get_user_model()
 
@@ -33,10 +34,7 @@ class RegisterView(APIView):
         if serializer.is_valid():
             user = serializer.save(is_active=False)
             self.send_activation_email(user, request)
-            return Response({
-                "message": "User registered successfully. Please check your email to activate your account.",
-                "user_id": user.id
-            }, status=status.HTTP_201_CREATED)
+            return Response(STANDARD_MESSAGES['REGISTRATION_SUCCESS'], status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @staticmethod
@@ -89,11 +87,11 @@ class ResendVerificationEmailView(APIView):
     def post(self, request):
         email = request.data.get('email')
         if not email:
-            return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(STANDARD_MESSAGES['USER_NOT_FOUND'], status=status.HTTP_400_BAD_REQUEST)
 
         user = User.objects.filter(email=email).first()
         if not user:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(STANDARD_MESSAGES['USER_NOT_FOUND'], status=status.HTTP_404_NOT_FOUND)
 
         if user.is_active:
             return Response({'error': 'User already verified'}, status=status.HTTP_400_BAD_REQUEST)
@@ -135,15 +133,15 @@ class LoginView(APIView):
         user = User.objects.filter(email=request.data.get('email')).first()
         if user and user.check_password(request.data.get('password')):
             if not user.is_active:
-                return Response({"message": "Please activate your account."}, status=status.HTTP_403_FORBIDDEN)
+                return Response(STANDARD_MESSAGES['ACCOUNT_NOT_ACTIVATED'], status=status.HTTP_403_FORBIDDEN)
             refresh = RefreshToken.for_user(user)
             access_token = refresh.access_token
 
             return Response({
                 'refresh': str(refresh),
                 'access': str(access_token),
-            })
-        return Response({"message": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+            }, status=status.HTTP_200_OK)
+        return Response(STANDARD_MESSAGES['INVALID_CREDENTIALS'], status=status.HTTP_401_UNAUTHORIZED)
 
 
 class CustomTokenRefreshView(TokenRefreshView):
@@ -176,14 +174,14 @@ class UpdateEmailView(generics.UpdateAPIView):
         serializer = self.get_serializer(self.get_object(), data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        return Response(serializer.data)
+        return Response(STANDARD_MESSAGES['EMAIL_UPDATE_SUCCESS'], status=status.HTTP_200_OK)
 
 
 class LogoutView(APIView):
     """
     Logout the authenticated user by blacklisting the refresh token.
     """
-    
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         refresh_token = request.data.get("refresh_token")
@@ -196,7 +194,7 @@ class LogoutView(APIView):
         except TokenError as e:
             return Response({"detail": "Invalid refresh token.", "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
+        return Response(STANDARD_MESSAGES['LOGOUT_SUCCESS'], status=status.HTTP_200_OK)
 
 
 class AccountDeletionView(APIView):
@@ -207,7 +205,7 @@ class AccountDeletionView(APIView):
 
     def post(self, request):
         request.user.delete()
-        return Response({"detail": "Account deleted successfully."}, status=status.HTTP_200_OK)
+        return Response(STANDARD_MESSAGES['ACCOUNT_DELETION_SUCCESS'], status=status.HTTP_200_OK)
 
 
 class CurrentUserView(generics.RetrieveAPIView):

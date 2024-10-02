@@ -10,21 +10,21 @@ class Profile(models.Model):
     Profile model to store user profile information.
     """
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, 
-        on_delete=models.CASCADE, 
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
         related_name='profile'
     )
     bio = models.TextField(max_length=500, blank=True)
     image = CloudinaryField(
-        'image', 
-        blank=True, 
-        null=True, 
+        'image',
+        blank=True,
+        null=True,
         folder="profiles",
         transformation={
-            "format": "webp", 
-            "quality": "auto:eco", 
-            "crop": "limit", 
-            "width": "1000", 
+            "format": "webp",
+            "quality": "auto:eco",
+            "crop": "limit",
+            "width": "1000",
             "height": "1000"
         }
     )
@@ -36,7 +36,7 @@ class Profile(models.Model):
 
     def clean(self):
         """
-        Custom validation for the Profile model.
+        Custom validation for the Profile model to ensure image size is within limits.
         """
         super().clean()
         if self.image and self.image.size > 2 * 1024 * 1024:
@@ -44,15 +44,15 @@ class Profile(models.Model):
 
     def update_popularity_score(self):
         """
-        Update the popularity score based on average rating, total ratings, and follower count.
+        Update the popularity score based on average post rating, total ratings, and follower count.
         """
         posts = self.user.posts.all()
         avg_rating = posts.aggregate(Avg('average_rating'))['average_rating__avg'] or 0
         total_ratings = posts.aggregate(total_ratings=Sum('total_ratings'))['total_ratings'] or 0
 
         self.popularity_score = (
-            (avg_rating * 0.4) + 
-            (total_ratings * 0.3) + 
+            (avg_rating * 0.4) +
+            (total_ratings * 0.3) +
             (self.follower_count * 0.3)
         )
         self.save(update_fields=['popularity_score'])
@@ -67,9 +67,9 @@ class Profile(models.Model):
         self.tag_count = self.user.tags.count()
         self.save(
             update_fields=[
-                'follower_count', 
-                'following_count', 
-                'comment_count', 
+                'follower_count',
+                'following_count',
+                'comment_count',
                 'tag_count'
             ]
         )
@@ -77,7 +77,7 @@ class Profile(models.Model):
     @classmethod
     def update_all_popularity_scores(cls):
         """
-        Class method to update popularity scores for all profiles.
+        Class method to update popularity scores for all profiles asynchronously.
         """
         from .tasks import update_all_popularity_scores
         update_all_popularity_scores.delay()

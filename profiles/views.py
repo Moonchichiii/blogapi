@@ -1,17 +1,18 @@
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
-from rest_framework import generics
+from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from .serializers import ProfileSerializer
 from .models import Profile
 from backend.permissions import IsOwnerOrReadOnly
+from .messages import STANDARD_MESSAGES
 
 
 class ProfileList(generics.ListAPIView):
     """
-    API view to retrieve list of profiles.
+    API view to retrieve a list of profiles.
     """
     serializer_class = ProfileSerializer
     permission_classes = [AllowAny]
@@ -21,7 +22,12 @@ class ProfileList(generics.ListAPIView):
         """
         Retrieve a cached list of profiles.
         """
-        return super().list(request, *args, **kwargs)
+        response = super().list(request, *args, **kwargs)
+        response.data.update({
+            'message': STANDARD_MESSAGES['PROFILE_RETRIEVED_SUCCESS']['message'],
+            'type': STANDARD_MESSAGES['PROFILE_RETRIEVED_SUCCESS']['type']
+        })
+        return response
 
     def get_queryset(self):
         """
@@ -40,6 +46,23 @@ class ProfileDetail(generics.RetrieveAPIView):
     lookup_url_kwarg = 'user_id'
     queryset = Profile.objects.all()
 
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Retrieve a profile by user ID.
+        """
+        try:
+            response = super().retrieve(request, *args, **kwargs)
+            response.data.update({
+                'message': STANDARD_MESSAGES['PROFILE_RETRIEVED_SUCCESS']['message'],
+                'type': STANDARD_MESSAGES['PROFILE_RETRIEVED_SUCCESS']['type']
+            })
+            return response
+        except Profile.DoesNotExist:
+            return Response({
+                'message': STANDARD_MESSAGES['PROFILE_NOT_FOUND']['message'],
+                'type': STANDARD_MESSAGES['PROFILE_NOT_FOUND']['type']
+            }, status=status.HTTP_404_NOT_FOUND)
+
 
 class CurrentUserProfile(generics.RetrieveUpdateAPIView):
     """
@@ -52,18 +75,44 @@ class CurrentUserProfile(generics.RetrieveUpdateAPIView):
         """
         Retrieve the profile of the current user.
         """
-        return Profile.objects.get(user=self.request.user)
-
-    def perform_update(self, serializer):
-        """
-        Save the updated profile.
-        """
-        serializer.save()
+        try:
+            return Profile.objects.get(user=self.request.user)
+        except Profile.DoesNotExist:
+            return None
 
     def retrieve(self, request, *args, **kwargs):
         """
         Retrieve the current user's profile.
         """
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
+        profile = self.get_object()
+        if profile:
+            serializer = self.get_serializer(profile)
+            return Response({
+                'data': serializer.data,
+                'message': STANDARD_MESSAGES['PROFILE_RETRIEVED_SUCCESS']['message'],
+                'type': STANDARD_MESSAGES['PROFILE_RETRIEVED_SUCCESS']['type']
+            }, status=status.HTTP_200_OK)
+        return Response({
+            'message': STANDARD_MESSAGES['PROFILE_NOT_FOUND']['message'],
+            'type': STANDARD_MESSAGES['PROFILE_NOT_FOUND']['type']
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    def update(self, request, *args, **kwargs):
+        """
+        Update the current user's profile.
+        """
+        profile = self.get_object()
+        if profile:
+            serializer = self.get_serializer(profile, data=request.data, partial=True)
+            if serializer.is_valid():
+                self.perform_update(serializer)
+                return Response({
+                    'data': serializer.data,
+                    'message': STANDARD_MESSAGES['PROFILE_UPDATED_SUCCESS']['message'],
+                    'type': STANDARD_MESSAGES['PROFILE_UPDATED_SUCCESS']['type']
+                }, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            'message': STANDARD_MESSAGES['PROFILE_NOT_FOUND']['message'],
+            'type': STANDARD_MESSAGES['PROFILE_NOT_FOUND']['type']
+        }, status=status.HTTP_404_NOT_FOUND)

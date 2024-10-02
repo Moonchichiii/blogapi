@@ -1,17 +1,12 @@
-"""
-This module contains models for the accounts app, including a custom user model
-and JWT authentication with token blacklisting.
-"""
-
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.utils.translation import gettext_lazy as _
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework import exceptions
 
 from .managers import CustomUserManager
+from .messages import STANDARD_MESSAGES
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
@@ -56,12 +51,14 @@ class CustomJWTAuthentication(JWTAuthentication):
                 jti = validated_token.get('jti')
                 if BlacklistedAccessToken.objects.filter(jti=jti).exists():
                     raise exceptions.AuthenticationFailed(
-                        'Access token has been blacklisted',
+                        STANDARD_MESSAGES['INVALID_TOKEN']['message'],
                         code='token_blacklisted'
                     )
                 return (user, validated_token)
         except (InvalidToken, TokenError) as exc:
-            raise exceptions.AuthenticationFailed('Invalid token') from exc
+            raise exceptions.AuthenticationFailed(
+                STANDARD_MESSAGES['INVALID_TOKEN']['message'],
+            ) from exc
         return None
 
 

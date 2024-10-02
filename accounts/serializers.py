@@ -5,7 +5,7 @@ from rest_framework import serializers
 import re
 from .models import CustomUser
 from profiles.serializers import ProfileSerializer
-
+from .messages import STANDARD_MESSAGES 
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for CustomUser model."""
@@ -27,22 +27,21 @@ class UserSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         """Ensure password validation when creating or updating."""
         if attrs.get('password') != attrs.get('password2'):
-            raise serializers.ValidationError({"password": "Password fields didn't match."})
+            raise serializers.ValidationError({"password": STANDARD_MESSAGES['INVALID_CREDENTIALS']['message']})
         return attrs
 
     def validate_email(self, value):
         """Validate that the email is unique."""
         if CustomUser.objects.filter(email=value).exists():
-            raise serializers.ValidationError("A user with that email already exists.")
+            raise serializers.ValidationError(STANDARD_MESSAGES['INVALID_CREDENTIALS']['message'])
         return value
 
     def validate_profile_name(self, value):
         """Validate that the profile name is unique and contains only alphanumeric characters and underscores."""
         if not re.match(r'^[a-zA-Z0-9_]+$', value):
-            raise serializers.ValidationError("Profile name can only contain letters, numbers, and underscores.")
-        # Perform a case-insensitive uniqueness check
+            raise serializers.ValidationError(STANDARD_MESSAGES['INVALID_CREDENTIALS']['message'])        
         if CustomUser.objects.filter(Q(profile_name__iexact=value)).exists():
-            raise serializers.ValidationError("This profile name is already taken.")
+            raise serializers.ValidationError(STANDARD_MESSAGES['INVALID_CREDENTIALS']['message'])
         return value
 
     def create(self, validated_data):
@@ -60,15 +59,15 @@ class UserSerializer(serializers.ModelSerializer):
             if 'unique_profile_name' in error_message or \
                'duplicate key value violates unique constraint' in error_message:
                 raise serializers.ValidationError(
-                    {'profile_name': 'This profile name is already taken.'}
+                    {'profile_name': STANDARD_MESSAGES['INVALID_CREDENTIALS']['message']}
                 )
             elif 'unique_email' in error_message:
                 raise serializers.ValidationError(
-                    {'email': 'A user with that email already exists.'}
+                    {'email': STANDARD_MESSAGES['INVALID_CREDENTIALS']['message']}
                 )
             else:
                 raise serializers.ValidationError(
-                    {'detail': 'An error occurred during registration.'}
+                    {'detail': STANDARD_MESSAGES['INVALID_CREDENTIALS']['message']}
                 )
 
     def update(self, instance, validated_data):
