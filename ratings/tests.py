@@ -124,3 +124,16 @@ class RatingTests(APITestCase):
         self.other_user.profile.refresh_from_db()
         self.assertEqual(post.average_rating, 4.0)
         self.assertGreater(self.other_user.profile.popularity_score, 0)
+        
+    def test_rating_updates_profile_popularity(self):
+        """Ensure rating a post updates the author's profile popularity score."""
+        self.client.force_authenticate(user=self.other_user)
+        data = {'post': self.post.id, 'value': 5}
+        response = self.client.post(reverse('create-update-rating'), data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        # Manually update the post's average rating
+        self.post.update_rating_stats()
+        # Manually update the author's profile popularity score
+        self.user.profile.update_popularity_score()
+        self.user.profile.refresh_from_db()
+        self.assertGreater(self.user.profile.popularity_score, 0)

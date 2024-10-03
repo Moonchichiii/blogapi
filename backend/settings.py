@@ -114,6 +114,8 @@ cloudinary.config(
     secure=True
 )
 
+DEFAULT_IMAGE_URL = cloudinary_url('default_img')[0]
+
 MEDIA_URL = '/media/'
 STATIC_URL = '/static/'
 
@@ -143,11 +145,7 @@ CELERY_BEAT_SCHEDULE = {
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        
-    ),
-     'EXCEPTION_HANDLER': 'posts.error_handler.custom_exception_handler',
-
-     
+    ),    
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
@@ -167,6 +165,7 @@ REST_FRAMEWORK = {
     'PAGE_SIZE_QUERY_PARAM': 'page_size',
     'MAX_PAGE_SIZE': 100,
 }
+
 
 # Simple JWT Settings
 SIMPLE_JWT = {

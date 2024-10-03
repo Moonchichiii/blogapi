@@ -2,8 +2,8 @@ from rest_framework import permissions
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
     """
-    Custom permission to only allow owners of an object to edit it.
-    Read permissions (GET, HEAD, OPTIONS) are allowed to any request.
+    Custom permission to allow owners, staff, or superusers to edit an object.
+    Read permissions are allowed to any request.
     """
 
     def has_object_permission(self, request, view, obj):
@@ -11,18 +11,14 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        # For write permissions, ensure that the user is the owner.
-        # Check if the object has 'user' and matches the request user.
-        if hasattr(obj, 'user') and obj.user == request.user:
-            return True
-        
-        # Check if the object has 'author' and matches the request user.
+        # Write permissions are allowed if the user is the owner, staff, or superuser.
         if hasattr(obj, 'author') and obj.author == request.user:
             return True
 
-        # Check if the object has 'profile' and matches the request user's profile.
-        if hasattr(obj, 'profile') and obj.profile == request.user.profile:
+        if hasattr(obj, 'user') and obj.user == request.user:
             return True
 
-        # Default to denying permission if ownership cannot be determined.
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+
         return False

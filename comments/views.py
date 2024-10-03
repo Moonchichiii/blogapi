@@ -6,6 +6,8 @@ from backend.permissions import IsOwnerOrReadOnly
 from posts.models import Post
 from .models import Comment
 from .serializers import CommentSerializer
+from .messages import STANDARD_MESSAGES
+
 
 class CommentList(generics.ListCreateAPIView):
     serializer_class = CommentSerializer
@@ -22,11 +24,10 @@ class CommentList(generics.ListCreateAPIView):
                 )
             ).get(pk=post_id)
         except Post.DoesNotExist as exc:
-            raise Http404("Post does not exist") from exc
-        
+            raise Http404(STANDARD_MESSAGES['POST_NOT_FOUND']['message']) from exc
+
         if not self.request.user.is_authenticated:
             return []
-        
         return post.prefetched_comments
 
     def perform_create(self, serializer):
@@ -34,15 +35,22 @@ class CommentList(generics.ListCreateAPIView):
         try:
             post = Post.objects.get(pk=post_id)
         except Post.DoesNotExist as exc:
-            raise Http404("Post does not exist") from exc
+            raise Http404(STANDARD_MESSAGES['POST_NOT_FOUND']['message']) from exc
         serializer.save(author=self.request.user, post=post)
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         if not request.user.is_authenticated:
-            return Response({"detail": "Authentication required to view comments."}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({
+                "message": STANDARD_MESSAGES['AUTHENTICATION_REQUIRED']['message']
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
         serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        return Response({
+            'data': serializer.data,
+            'message': STANDARD_MESSAGES['COMMENTS_RETRIEVED_SUCCESS']['message']
+        })
+
 
 class CommentDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Comment.objects.select_related('author', 'post')
@@ -52,6 +60,12 @@ class CommentDetail(generics.RetrieveUpdateDestroyAPIView):
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         if not request.user.is_authenticated:
-            return Response({"detail": "Authentication required to view comments."}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({
+                "message": STANDARD_MESSAGES['AUTHENTICATION_REQUIRED']['message']
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
         serializer = self.get_serializer(instance)
-        return Response(serializer.data)
+        return Response({
+            'data': serializer.data,
+            'message': STANDARD_MESSAGES['COMMENT_RETRIEVED_SUCCESS']['message']
+        })

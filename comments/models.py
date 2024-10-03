@@ -2,18 +2,19 @@ from django.db import models
 from django.conf import settings
 from posts.models import Post
 
+
 class Comment(models.Model):
     """
     Model representing a comment on a blog post.
     """
     post = models.ForeignKey(
-        Post, 
-        on_delete=models.CASCADE, 
+        Post,
+        on_delete=models.CASCADE,
         related_name='comments'
     )
     author = models.ForeignKey(
-        settings.AUTH_USER_MODEL, 
-        on_delete=models.CASCADE, 
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
         related_name='comments'
     )
     content = models.TextField()

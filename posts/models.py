@@ -1,17 +1,14 @@
-from django.db import models
+from django.db import models, connection
 from django.db.models import Avg, Count
 from django.conf import settings
 from cloudinary.models import CloudinaryField
 from django.contrib.contenttypes.fields import GenericRelation
 from tags.models import ProfileTag
-from .messages import STANDARD_MESSAGES
 from django.core.exceptions import ValidationError
-from django.utils.text import slugify
-
 
 class Post(models.Model):
     """
-    Model representing a blog post.
+    Represents a blog post.
     """
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -30,7 +27,8 @@ class Post(models.Model):
             "crop": "limit",
             "width": 2000,
             "height": 2000
-        }
+        },
+        default='default.webp'
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -38,7 +36,6 @@ class Post(models.Model):
     average_rating = models.FloatField(default=0)
     total_ratings = models.PositiveIntegerField(default=0)
     tags = GenericRelation(ProfileTag)
-    slug = models.SlugField(max_length=250, unique=True, blank=True)
 
     class Meta:
         verbose_name = "Blog Post"
@@ -49,11 +46,6 @@ class Post(models.Model):
             models.Index(fields=['is_approved']),
             models.Index(fields=['author']),
         ]
-
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.title)
-        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.title
@@ -66,18 +58,17 @@ class Post(models.Model):
         self.average_rating = stats['avg_rating'] or 0
         self.total_ratings = stats['total_ratings']
         self.save(update_fields=['average_rating', 'total_ratings'])
+        self.author.profile.update_popularity_score()
 
-    def get_average_rating(self):
-        if not hasattr(self, '_cached_average_rating'):
-            self._cached_average_rating = self.average_rating
-        return self._cached_average_rating
+    @staticmethod
+    def explain_query():
+        """
+        Explain the SQL query for performance analysis.
+        """
+        qs = Post.objects.filter(is_approved=True).order_by('-created_at')
+        sql, params = qs.query.sql_with_params()
 
-    def get_total_ratings(self):
-        if not hasattr(self, '_cached_total_ratings'):
-            self._cached_total_ratings = self.total_ratings
-        return self._cached_total_ratings
-
-    def clean(self):
-        if Post.objects.filter(title=self.title).exclude(pk=self.pk).exists():
-            raise ValidationError(STANDARD_MESSAGES['POST_DUPLICATE_TITLE']['message'])
-        super().clean()
+        with connection.cursor() as cursor:
+            cursor.execute(f"EXPLAIN {sql}", params)
+            for row in cursor.fetchall():
+                print(row)

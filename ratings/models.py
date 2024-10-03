@@ -1,23 +1,20 @@
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
-from posts.models import Post
-
+# Remove this import
+# from posts.models import Post
 
 class Rating(models.Model):
-    """
-    Model to represent a rating given by a user to a post.
-    """
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='ratings'
     )
     post = models.ForeignKey(
-        Post,
+        'posts.Post',  # Referencing Post lazily
         on_delete=models.CASCADE,
         related_name='ratings'
     )
@@ -39,19 +36,8 @@ class Rating(models.Model):
 
 @receiver(post_save, sender=Rating)
 @receiver(post_delete, sender=Rating)
-def update_post_rating(sender, instance, **kwargs):
-    """
-    Signal receiver to update the rating statistics of a post
-    whenever a rating is saved or deleted.
-    """
-    instance.post.update_rating_stats()
-
-
-@receiver(post_save, sender=Rating)
-@receiver(post_delete, sender=Rating)
-def update_profile_popularity(sender, instance, **kwargs):
-    """
-    Signal receiver to update the popularity score of a user's profile
-    whenever a rating is saved or deleted.
-    """
-    instance.post.author.profile.update_popularity_score()
+def update_post_stats(sender, instance, **kwargs):
+    # Import Post lazily within the function to avoid circular import
+    from posts.models import Post
+    from posts.tasks import update_post_stats
+    update_post_stats.delay(instance.post.id)

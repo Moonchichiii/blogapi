@@ -4,18 +4,11 @@ from posts.models import Post
 from .models import Rating
 from .serializers import RatingSerializer
 
-
 class CreateUpdateRating(generics.CreateAPIView):
-    """
-    API view to create or update a rating for a post.
-    """
     serializer_class = RatingSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
-        """
-        Handle the creation or update of a rating.
-        """
         user = request.user
         post_id = request.data.get('post')
 
@@ -28,18 +21,24 @@ class CreateUpdateRating(generics.CreateAPIView):
             instance = Rating.objects.get(user=user, post=post)
             serializer = self.get_serializer(instance, data=request.data, partial=True)
             status_code = status.HTTP_200_OK
+            message = "Rating updated successfully."
         except Rating.DoesNotExist:
             serializer = self.get_serializer(data=request.data)
             status_code = status.HTTP_201_CREATED
+            message = "Rating created successfully."
 
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
 
+        
+        post.update_rating_stats()
+
         headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status_code, headers=headers)
+        return Response({
+            "data": serializer.data,
+            "message": message,
+            "type": "success"
+        }, status=status_code, headers=headers)
 
     def perform_create(self, serializer):
-        """
-        Save the rating instance with the current user.
-        """
         serializer.save(user=self.request.user)

@@ -4,10 +4,8 @@ from .models import Comment
 
 class CommentSerializer(serializers.ModelSerializer):
     """
-    Serializer for the Comment model.
-    Includes an additional read-only field for the author's profile name.
+    Serializer for the Comment model, including author's profile name.
     """
-
     author_name = serializers.CharField(source='author.profile_name', read_only=True)
 
     class Meta:
