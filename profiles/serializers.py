@@ -24,52 +24,41 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     def __init__(self, *args, **kwargs):
         """
-        Initialize the serializer and conditionally remove the email field
-        when the requesting user is not authenticated or is not the profile owner.
+        Initialize the serializer and conditionally remove the email field.
         """
         super().__init__(*args, **kwargs)
         request = self.context.get('request', None)
         user = getattr(request, 'user', None)
-        
-        # Remove the email field if the user is not authenticated or not the owner of the profile.
-        if self.instance and user and (not user.is_authenticated or self.instance.user != user):
-            self.fields.pop('email', None)
+        if self.instance and user:
+            if not user.is_authenticated or self.instance.user != user:
+                self.fields.pop('email', None)
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: Profile) -> dict:
         """
         Customize the representation of the instance.
         Convert image field to URL format if it exists.
         """
         representation = super().to_representation(instance)
-        
-        # Add image URL if the image exists.
         if instance.image:
             representation['image'] = instance.image.url
-        
         return representation
 
-    def get_is_following(self, obj):
+    def get_is_following(self, obj: Profile) -> bool:
         """
         Determine if the current user is following the profile user.
         """
         request = self.context.get('request', None)
         user = getattr(request, 'user', None)
-
-        # Check if the authenticated user is following the profile user.
         if user:
             return user.is_authenticated and obj.user.followers.filter(follower=user).exists()
-        
         return False
 
-    def update(self, instance, validated_data):
+    def update(self, instance: Profile, validated_data: dict) -> Profile:
         """
         Update the profile instance with validated data.
         """
         instance.bio = validated_data.get('bio', instance.bio)
-        
-        # Only update the image field if provided.
         if 'image' in validated_data:
             instance.image = validated_data['image']
-        
         instance.save()
         return instance

@@ -1,11 +1,10 @@
-from django.db import models
 from django.conf import settings
+from django.db import models
 from posts.models import Post
-
 
 class Comment(models.Model):
     """
-    Model representing a comment on a blog post.
+    Represents a comment on a blog post.
     """
     post = models.ForeignKey(
         Post,
@@ -17,9 +16,9 @@ class Comment(models.Model):
         on_delete=models.CASCADE,
         related_name='comments'
     )
-    content = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    content = models.TextField(help_text="Content of the comment.")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="Time when the comment was created.")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Time when the comment was last updated.")
 
     class Meta:
         ordering = ['-created_at']
@@ -29,6 +28,6 @@ class Comment(models.Model):
 
     def __str__(self):
         """
-        String representation of the Comment model.
+        Returns a string representation of the Comment.
         """
         return f'Comment by {self.author.profile_name} on {self.post.title}'

@@ -5,7 +5,7 @@ from rest_framework import serializers
 import re
 from .models import CustomUser
 from profiles.serializers import ProfileSerializer
-from .messages import STANDARD_MESSAGES 
+from .messages import STANDARD_MESSAGES
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for CustomUser model."""
@@ -39,7 +39,7 @@ class UserSerializer(serializers.ModelSerializer):
     def validate_profile_name(self, value):
         """Validate that the profile name is unique and contains only alphanumeric characters and underscores."""
         if not re.match(r'^[a-zA-Z0-9_]+$', value):
-            raise serializers.ValidationError(STANDARD_MESSAGES['INVALID_CREDENTIALS']['message'])        
+            raise serializers.ValidationError(STANDARD_MESSAGES['INVALID_CREDENTIALS']['message'])
         if CustomUser.objects.filter(Q(profile_name__iexact=value)).exists():
             raise serializers.ValidationError(STANDARD_MESSAGES['INVALID_CREDENTIALS']['message'])
         return value
@@ -74,13 +74,13 @@ class UserSerializer(serializers.ModelSerializer):
         """Update an existing CustomUser instance."""
         password = validated_data.pop('password', None)
         validated_data.pop('password2', None)
-        
+
         if password:
             instance.set_password(password)
-        
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        
+
         instance.save()
         return instance
 

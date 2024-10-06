@@ -12,10 +12,9 @@ urlpatterns = [
     path('api/', include('posts.urls')),
     path('api/', include('comments.urls')),
     path('api/', include('ratings.urls')),
-    path('api/', include('tags.urls')),    
+    path('api/', include('tags.urls')),
     path('api/followers/', include('followers.urls')),
 ]
 
-# # Serve media files in development
-# if settings.DEBUG:
-#     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

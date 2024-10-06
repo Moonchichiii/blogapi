@@ -1,11 +1,11 @@
 from unittest.mock import patch
 from django_otp.plugins.otp_totp.models import TOTPDevice
-from django.test import TestCase, RequestFactory, override_settings
+from django.test import override_settings
 from django.urls import reverse
 from django.utils.crypto import get_random_string
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
-from rest_framework import serializers, status, exceptions
+from rest_framework import status, exceptions
 from rest_framework.test import APIClient, APITestCase, APIRequestFactory
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -22,6 +22,7 @@ class AuthenticationTests(APITestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Set up URLs for tests."""
         cls.register_url = reverse('register')
         cls.login_url = reverse('login')
         cls.token_refresh_url = reverse('token_refresh')
@@ -30,6 +31,7 @@ class AuthenticationTests(APITestCase):
         cls.delete_account_url = reverse('delete_account')
 
     def setUp(self):
+        """Set up client and factory for tests."""
         self.client = APIClient()
         self.factory = APIRequestFactory()
         OutstandingToken.objects.all().delete()
@@ -96,23 +98,21 @@ class AuthenticationTests(APITestCase):
             email='testuser@example.com',
             profile_name='testuser',
             password='StrongPassword123!'
-            )
+        )
         user.is_active = True
         user.save()
-        
+
         login_data = {
             'email': 'testuser@example.com',
             'password': 'StrongPassword123!'
-            }
+        }
         response = self.client.post(self.login_url, login_data, format='json')
         access_token = response.data['access']
 
-    
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
         response = self.client.get(self.current_user_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    
         self.client.credentials(HTTP_AUTHORIZATION='Bearer invalidtoken')
         response = self.client.get(self.current_user_url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -257,14 +257,17 @@ class AuthenticationTests(APITestCase):
         response = self.client.post(self.register_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         mock_send_mail.assert_called_once()
-        # Validate email arguments
         self.assertIn('Activate your account', mock_send_mail.call_args[0][0])
         self.assertIn('newuser@example.com', mock_send_mail.call_args[0][3])
 
     def test_account_activation_with_invalid_token(self):
         """Test that activation with an invalid token fails."""
         user = CustomUser.objects.create_user(
-            profile_name="inactiveuser", email="inactiveuser@example.com", password="StrongPassword123!", is_active=False)
+            profile_name="inactiveuser",
+            email="inactiveuser@example.com",
+            password="StrongPassword123!",
+            is_active=False
+        )
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         invalid_token = 'invalid-token'
         response = self.client.get(reverse('activate', kwargs={'uidb64': uid, 'token': invalid_token}))
@@ -340,7 +343,10 @@ class AuthenticationTests(APITestCase):
     def test_2fa_setup_when_device_already_exists(self):
         """Test that 2FA setup fails when the device already exists."""
         user = CustomUser.objects.create_user(
-            profile_name="2fauser", email="2fauser@example.com", password="StrongPassword123!")
+            profile_name="2fauser",
+            email="2fauser@example.com",
+            password="StrongPassword123!"
+        )
         self.client.force_authenticate(user=user)
         TOTPDevice.objects.create(user=user, name="default")
         response = self.client.post(reverse('setup_2fa'))
@@ -348,7 +354,6 @@ class AuthenticationTests(APITestCase):
         self.assertIn('A 2FA device already exists', response.data.get('error', ''))
 
     ### --- Email Verification Tests --- ###
-
     def test_resend_verification_email(self):
         """Test resend verification email."""
         user = CustomUser.objects.create_user(
@@ -427,38 +432,36 @@ class AuthenticationTests(APITestCase):
         updated_user = serializer.save()
         self.assertEqual(updated_user.email, 'updated@example.com')
         self.assertEqual(updated_user.profile_name, 'updateduser')
-        
+
     def test_resend_verification_email_invalid_email(self):
-            """Test resend verification email with invalid email."""
-            data = {"email": "nonexistent@example.com"}
-            response = self.client.post(reverse('resend_verification'), data, format='json')
-            self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-            self.assertEqual(response.data['message'], STANDARD_MESSAGES['USER_NOT_FOUND']['message'])
+        """Test resend verification email with invalid email."""
+        data = {"email": "nonexistent@example.com"}
+        response = self.client.post(reverse('resend_verification'), data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['message'], STANDARD_MESSAGES['USER_NOT_FOUND']['message'])
 
     def test_update_email(self):
-            """Test updating user email."""
-            user = CustomUser.objects.create_user(
-                email='testuser@example.com',
-                profile_name='testuser',
-                password='StrongPassword123!'
-            )
-            self.client.force_authenticate(user=user)
-            data = {"email": "newemail@example.com"}
-            response = self.client.patch(self.update_email_url, data, format='json')
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertEqual(response.data['message'], STANDARD_MESSAGES['EMAIL_UPDATE_SUCCESS']['message'])
-            user.refresh_from_db()
-            self.assertEqual(user.email, "newemail@example.com")
-            
-            
-            
+        """Test updating user email."""
+        user = CustomUser.objects.create_user(
+            email='testuser@example.com',
+            profile_name='testuser',
+            password='StrongPassword123!'
+        )
+        self.client.force_authenticate(user=user)
+        data = {"email": "newemail@example.com"}
+        response = self.client.patch(self.update_email_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['message'], STANDARD_MESSAGES['EMAIL_UPDATE_SUCCESS']['message'])
+        user.refresh_from_db()
+        self.assertEqual(user.email, "newemail@example.com")
+
     def test_logout(self):
         """Test user logout."""
         user = CustomUser.objects.create_user(
             email='testuser@example.com',
             profile_name='testuser',
             password='StrongPassword123!'
-            )
+        )
         refresh = RefreshToken.for_user(user)
         self.client.force_authenticate(user=user)
         data = {"refresh_token": str(refresh)}
@@ -466,63 +469,61 @@ class AuthenticationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['message'], STANDARD_MESSAGES['LOGOUT_SUCCESS']['message'])
 
-
     def test_logout_invalid_token(self):
         """Test logout with invalid token."""
         user = CustomUser.objects.create_user(
             email='testuser@example.com',
             profile_name='testuser',
             password='StrongPassword123!'
-            )
+        )
         self.client.force_authenticate(user=user)
         data = {"refresh_token": "invalidtoken"}
         response = self.client.post(reverse('logout'), data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Invalid refresh token.", response.data['detail'])
-        
+
     def test_custom_user_creation_and_manager(self):
         """Test CustomUser creation and manager methods."""
         user = CustomUser.objects.create_user(
             email='testuser@example.com',
             profile_name='testuser',
             password='StrongPassword123!'
-            )
+        )
         self.assertEqual(user.email, 'testuser@example.com')
         self.assertEqual(user.profile_name, 'testuser')
         self.assertFalse(user.is_staff)
         self.assertFalse(user.is_superuser)
         self.assertTrue(user.is_active)
-        
+
         superuser = CustomUser.objects.create_superuser(
-                    email='admin@example.com',
-                    profile_name='admin',
-                    password='StrongPassword123!'
-                )
+            email='admin@example.com',
+            profile_name='admin',
+            password='StrongPassword123!'
+        )
         self.assertEqual(superuser.email, 'admin@example.com')
         self.assertEqual(superuser.profile_name, 'admin')
         self.assertTrue(superuser.is_staff)
         self.assertTrue(superuser.is_superuser)
         self.assertTrue(superuser.is_active)
-        
+
     def test_user_serializer_to_representation(self):
         """Test UserSerializer to_representation method."""
         user = CustomUser.objects.create_user(
             email='testuser@example.com',
             profile_name='testuser',
             password='StrongPassword123!'
-            )
+        )
         serializer = UserSerializer(instance=user)
         data = serializer.data
         self.assertNotIn('password', data)
         self.assertNotIn('password2', data)
         # Test representation for non-owner
-        
         request = self.factory.get('/')
         request.user = CustomUser.objects.create_user(
             email='otheruser@example.com',
             profile_name='otheruser',
             password='StrongPassword123!'
-            )
+        )
         serializer.context['request'] = request
         data = serializer.to_representation(user)
         self.assertNotIn('email', data)
@@ -533,10 +534,9 @@ class AuthenticationTests(APITestCase):
             email='testuser@example.com',
             profile_name='testuser',
             password='StrongPassword123!',
-            is_active=False  
-            )
+            is_active=False
+        )
         uid = urlsafe_base64_encode(force_bytes(user.pk))
-        token = account_activation_token.make_token(user)   
         response = self.client.get(reverse('activate', kwargs={'uidb64': uid, 'token': 'invalidtoken'}))
         self.assertEqual(response.status_code, 302)
         self.assertIn('status=error', response.url)
@@ -544,9 +544,9 @@ class AuthenticationTests(APITestCase):
     def test_custom_token_refresh(self):
         """Test CustomTokenRefreshView."""
         user = CustomUser.objects.create_user(
-        email='testuser@example.com',
-        profile_name='testuser',
-        password='StrongPassword123!'
+            email='testuser@example.com',
+            profile_name='testuser',
+            password='StrongPassword123!'
         )
         refresh = RefreshToken.for_user(user)
         data = {'refresh': str(refresh)}
@@ -561,28 +561,25 @@ class AuthenticationTests(APITestCase):
             email='testuser@example.com',
             profile_name='testuser',
             password='StrongPassword123!'
-            )
+        )
         self.client.force_authenticate(user=user)
         response = self.client.post(reverse('logout'))
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST),
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Refresh token is required.", response.data['detail'])
-        
+
     def test_custom_jwt_authentication_with_blacklisted_token(self):
         """Test CustomJWTAuthentication with a blacklisted token."""
         user = CustomUser.objects.create_user(
             email='testuser@example.com',
             profile_name='testuser',
             password='StrongPassword123!'
-            )
+        )
         refresh = RefreshToken.for_user(user)
         access_token = refresh.access_token
-        
-        BlacklistedAccessToken.objects.create(jti=access_token['jti'])    
-    
+        BlacklistedAccessToken.objects.create(jti=access_token['jti'])
         auth = CustomJWTAuthentication()
         request = self.factory.get('/')
         request.META['HTTP_AUTHORIZATION'] = f'Bearer {str(access_token)}'
-        
         with self.assertRaises(exceptions.AuthenticationFailed) as context:
             auth.authenticate(request)
         self.assertEqual(str(context.exception), STANDARD_MESSAGES['INVALID_TOKEN']['message'])

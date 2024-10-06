@@ -1,21 +1,28 @@
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
-from django.contrib.auth import get_user_model
-from posts.models import Post
+
 from comments.models import Comment
-from django.contrib.contenttypes.models import ContentType
+from posts.models import Post
+from .messages import STANDARD_MESSAGES
 from .models import ProfileTag
 
 User = get_user_model()
 
-
-class TagTests(APITestCase):
+class ProfileTagAPITests(APITestCase):
     """Test suite for the ProfileTag API."""
 
     def setUp(self):
         """Set up test data for the tests."""
-        # Create users
+        self._create_test_users()
+        self._create_test_post_and_comment()
+        self._set_content_types()
+        self.tag_url = reverse('create-profile-tag')
+
+    def _create_test_users(self):
+        """Create test users."""
         self.user = User.objects.create_user(
             email='testuser@example.com',
             profile_name='testuser',
@@ -32,7 +39,8 @@ class TagTests(APITestCase):
         self.other_user.is_active = True
         self.other_user.save()
 
-        # Create Post and Comment
+    def _create_test_post_and_comment(self):
+        """Create a test post and comment."""
         self.post = Post.objects.create(
             author=self.user,
             title='Test Post',
@@ -45,12 +53,10 @@ class TagTests(APITestCase):
             content="Test comment"
         )
 
-        # Content types for Post and Comment
+    def _set_content_types(self):
+        """Set content types for post and comment."""
         self.post_content_type = ContentType.objects.get_for_model(Post)
         self.comment_content_type = ContentType.objects.get_for_model(Comment)
-
-        # Tag URL
-        self.tag_url = reverse('create-profile-tag')
 
     def test_create_tag_for_post(self):
         """Test creating a tag for a post as an authenticated user."""
@@ -81,30 +87,28 @@ class TagTests(APITestCase):
         self.client.force_authenticate(user=None)
 
     def test_tagging_yourself(self):
-        """Test tagging yourself (Edge Case)."""
+        """Test that a user cannot tag themselves."""
         self.client.force_authenticate(user=self.user)
         data = {
-            'tagged_user': self.user.id,  # Tagging self
+            'tagged_user': self.user.id,
             'content_type': self.post_content_type.id,
             'object_id': self.post.id
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('You cannot tag yourself.', str(response.data))
-        self.client.force_authenticate(user=None)
+        self.assertEqual(response.data['error'], STANDARD_MESSAGES['CANNOT_TAG_SELF']['message'])
 
     def test_create_tag_invalid_content_type(self):
-        """Test creating a tag for an invalid content type."""
+        """Test creating a tag with an invalid content type."""
         self.client.force_authenticate(user=self.user)
         data = {
             'tagged_user': self.other_user.id,
-            'content_type': 999,  # Invalid content type
+            'content_type': 999,
             'object_id': self.post.id
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('Invalid content type', str(response.data))
-        self.client.force_authenticate(user=None)
+        self.assertEqual(response.data['error'], STANDARD_MESSAGES['INVALID_CONTENT_TYPE']['message'])
 
     def test_create_tag_for_non_existent_object(self):
         """Test creating a tag for a non-existent object."""
@@ -112,28 +116,26 @@ class TagTests(APITestCase):
         data = {
             'tagged_user': self.other_user.id,
             'content_type': self.post_content_type.id,
-            'object_id': 9999  # Non-existent post/comment
+            'object_id': 9999
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('Invalid object', str(response.data))
-        self.client.force_authenticate(user=None)
+        self.assertEqual(response.data['error'], "Invalid object.")
 
     def test_duplicate_tag_for_same_object(self):
-        """Test creating a duplicate tag for the same user on the same object (Edge Case)."""
+        """Test creating a duplicate tag for the same object."""
         self.client.force_authenticate(user=self.user)
         data = {
             'tagged_user': self.other_user.id,
             'content_type': self.post_content_type.id,
             'object_id': self.post.id
         }
-        # First tag
-        self.client.post(self.tag_url, data)
-        # Attempt duplicate tag
+        response_first = self.client.post(self.tag_url, data)
+        self.assertEqual(response_first.status_code, status.HTTP_201_CREATED)
+
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('duplicate', str(response.data).lower())
-        self.client.force_authenticate(user=None)
+        self.assertEqual(response.data['errors']['non_field_errors'][0], "The fields tagged_user, content_type, object_id must make a unique set.")
 
     def test_create_tag_as_unauthenticated_user(self):
         """Test creating a tag as an unauthenticated user."""
@@ -144,3 +146,26 @@ class TagTests(APITestCase):
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_create_tag_with_invalid_object_id(self):
+        """Test creating a tag with an invalid object ID."""
+        self.client.force_authenticate(user=self.user)
+        data = {
+            'tagged_user': self.other_user.id,
+            'content_type': self.post_content_type.id,
+            'object_id': 'invalid'
+        }
+        response = self.client.post(self.tag_url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['error'], "Invalid content type for tagging.")
+        self.client.force_authenticate(user=None)
+
+    def test_create_tag_with_missing_fields(self):
+        """Test creating a tag with missing fields."""
+        self.client.force_authenticate(user=self.user)
+        data = {
+            'tagged_user': self.other_user.id,
+        }
+        response = self.client.post(self.tag_url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.client.force_authenticate(user=None)

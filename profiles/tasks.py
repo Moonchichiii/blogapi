@@ -1,6 +1,7 @@
 from celery import shared_task
 from .models import Profile
 
+
 @shared_task
 def update_all_popularity_scores():
     profiles = Profile.objects.all()

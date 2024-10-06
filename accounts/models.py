@@ -28,14 +28,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         return str(self.email)
 
     class Meta:
-        """
-        Meta class for CustomUser model.
-        """
         constraints = [
             models.UniqueConstraint(fields=['email'], name='unique_email'),
-            models.UniqueConstraint(
-                fields=['profile_name'], name='unique_profile_name'
-            ),
+            models.UniqueConstraint(fields=['profile_name'], name='unique_profile_name'),
         ]
 
 
@@ -54,7 +49,7 @@ class CustomJWTAuthentication(JWTAuthentication):
                         STANDARD_MESSAGES['INVALID_TOKEN']['message'],
                         code='token_blacklisted'
                     )
-                return (user, validated_token)
+                return user, validated_token
         except (InvalidToken, TokenError) as exc:
             raise exceptions.AuthenticationFailed(
                 STANDARD_MESSAGES['INVALID_TOKEN']['message'],
@@ -69,4 +64,4 @@ class BlacklistedAccessToken(models.Model):
     jti = models.CharField(max_length=255, unique=True)
 
     def __str__(self):
-        return str(self.jti)
+        return self.jti

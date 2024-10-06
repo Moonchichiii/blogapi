@@ -28,20 +28,22 @@ class Follow(models.Model):
 @receiver(post_save, sender=Follow)
 def update_profile_on_follow(sender, instance, created, **kwargs):
     """
-    Signal receiver to update the follower count and popularity score
-    when a follow relationship is created.
+    Signal to update profile counts when a follow relationship is created.
     """
     if created:
         instance.followed.profile.follower_count += 1
-        instance.followed.profile.save()
-    instance.followed.profile.update_popularity_score()
+        instance.followed.profile.save(update_fields=['follower_count'])
+        instance.followed.profile.update_popularity_score()
+        instance.follower.profile.following_count += 1
+        instance.follower.profile.save(update_fields=['following_count'])
 
 @receiver(post_delete, sender=Follow)
 def update_profile_on_unfollow(sender, instance, **kwargs):
     """
-    Signal receiver to update the follower count and popularity score
-    when a follow relationship is deleted.
+    Signal to update profile counts when a follow relationship is deleted.
     """
     instance.followed.profile.follower_count -= 1
-    instance.followed.profile.save()
+    instance.followed.profile.save(update_fields=['follower_count'])
     instance.followed.profile.update_popularity_score()
+    instance.follower.profile.following_count -= 1
+    instance.follower.profile.save(update_fields=['following_count'])

@@ -7,6 +7,11 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
     """
 
     def has_object_permission(self, request, view, obj):
+        """
+        Check if the request has object-level permissions.
+        Read permissions are allowed for any request.
+        Write permissions are allowed if the user is the owner, staff, or superuser.
+        """
         # Read permissions are allowed for any request.
         if request.method in permissions.SAFE_METHODS:
             return True

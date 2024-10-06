@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import CreateUpdateRating
+from .views import CreateOrUpdateRatingView
 
 urlpatterns = [
-    path('rate/', CreateUpdateRating.as_view(), name='create-update-rating'),
+    path('rate/', CreateOrUpdateRatingView.as_view(), name='create-update-rating'),
 ]

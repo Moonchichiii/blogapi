@@ -1,8 +1,11 @@
+"""
+Django settings for the Blog Project.
+"""
+
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
 import cloudinary
-import cloudinary.uploader
 from cloudinary.utils import cloudinary_url
 import sys
 from celery.schedules import crontab
@@ -41,6 +44,7 @@ LOGIN_URL = 'two_factor:login'
 LOGIN_REDIRECT_URL = 'two_factor:profile'
 TWO_FACTOR_PATCH_ADMIN = True
 
+# Cache Configuration
 if 'test' in sys.argv:
     CACHES = {
         'default': {
@@ -165,7 +169,6 @@ REST_FRAMEWORK = {
     'PAGE_SIZE_QUERY_PARAM': 'page_size',
     'MAX_PAGE_SIZE': 100,
 }
-
 
 # Simple JWT Settings
 SIMPLE_JWT = {

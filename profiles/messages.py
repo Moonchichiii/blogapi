@@ -1,5 +1,6 @@
 from django.utils.translation import gettext_lazy as _
 
+# Define message types
 MESSAGE_TYPES = {
     'SUCCESS': 'success',
     'ERROR': 'error',
@@ -7,6 +8,7 @@ MESSAGE_TYPES = {
     'INFO': 'info',
 }
 
+# Define standard messages for profile operations
 STANDARD_MESSAGES = {
     # Success Messages
     'PROFILE_RETRIEVED_SUCCESS': {
@@ -46,7 +48,7 @@ STANDARD_MESSAGES = {
     'CANNOT_FOLLOW_OWN_PROFILE': {
         'type': MESSAGE_TYPES['ERROR'],
         'message': _("You cannot follow your own profile."),
-    },    
+    },
     'ALREADY_FOLLOWING_PROFILE': {
         'type': MESSAGE_TYPES['ERROR'],
         'message': _("You are already following this profile."),
@@ -60,9 +62,9 @@ STANDARD_MESSAGES = {
         'message': _("You are not authorized to update this profile."),
     },
     'INVALID_BIO_LENGTH': {
-    'type': MESSAGE_TYPES['ERROR'],
-    'message': _("Bio length should not exceed 500 characters."),
-},
+        'type': MESSAGE_TYPES['ERROR'],
+        'message': _("Bio length should not exceed 500 characters."),
+    },
 
     # Warning Messages
     'PROFILE_INCOMPLETE_WARNING': {

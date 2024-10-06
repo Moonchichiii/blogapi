@@ -1,10 +1,10 @@
-from django.db import models, connection
-from django.db.models import Avg, Count
 from django.conf import settings
-from cloudinary.models import CloudinaryField
 from django.contrib.contenttypes.fields import GenericRelation
+from django.db import connection, models
+from django.db.models import Avg, Count
+
+from cloudinary.models import CloudinaryField
 from tags.models import ProfileTag
-from django.core.exceptions import ValidationError
 
 class Post(models.Model):
     """
@@ -47,28 +47,32 @@ class Post(models.Model):
             models.Index(fields=['author']),
         ]
 
-    def __str__(self):
-        return self.title
+    def __str__(self) -> str:
+        return str(self.title)
 
-    def update_rating_stats(self):
-        stats = self.ratings.aggregate(
+
+    def update_rating_statistics(self):
+        """
+        Update the average rating and total ratings for the post.
+        """
+        rating_stats = self.ratings.aggregate(
             avg_rating=Avg('value'),
             total_ratings=Count('id')
         )
-        self.average_rating = stats['avg_rating'] or 0
-        self.total_ratings = stats['total_ratings']
+        self.average_rating = rating_stats['avg_rating'] or 0
+        self.total_ratings = rating_stats['total_ratings']
         self.save(update_fields=['average_rating', 'total_ratings'])
         self.author.profile.update_popularity_score()
 
     @staticmethod
-    def explain_query():
+    def explain_query() -> list:
         """
-        Explain the SQL query for performance analysis.
+        Explain the query plan for fetching approved posts ordered by creation date.
         """
-        qs = Post.objects.filter(is_approved=True).order_by('-created_at')
-        sql, params = qs.query.sql_with_params()
+        query_set = Post.objects.filter(is_approved=True).order_by('-created_at')
+        sql, params = query_set.query.sql_with_params()
 
         with connection.cursor() as cursor:
             cursor.execute(f"EXPLAIN {sql}", params)
-            for row in cursor.fetchall():
-                print(row)
+            result = cursor.fetchall()            
+            return result

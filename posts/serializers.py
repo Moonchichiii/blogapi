@@ -21,10 +21,12 @@ class PostListSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'author', 'created_at', 'average_rating', 'is_owner', 'comment_count', 'tag_count']
 
     def get_is_owner(self, obj):
+        """Check if the current user is the owner of the post."""
         request = self.context.get('request')
         return request.user == obj.author if request and request.user.is_authenticated else False
 
     def to_representation(self, instance):
+        """Customize the representation of the post."""
         representation = super().to_representation(instance)
         representation['comment_count'] = instance.comments.count()
         representation['tag_count'] = instance.tags.count()
@@ -51,13 +53,16 @@ class PostSerializer(serializers.ModelSerializer):
         }
 
     def get_is_owner(self, obj):
+        """Check if the current user is the owner of the post."""
         request = self.context.get('request')
         return request.user == obj.author if request and request.user.is_authenticated else False
 
     def get_tagged_users(self, obj):
+        """Get the profile names of tagged users."""
         return [tag.tagged_user.profile_name for tag in obj.tags.all()]
 
     def get_user_rating(self, obj):
+        """Get the rating given by the current user."""
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             rating = Rating.objects.filter(post=obj, user=request.user).first()
@@ -65,25 +70,29 @@ class PostSerializer(serializers.ModelSerializer):
         return None
 
     def validate_tags(self, value):
+        """Validate that there are no duplicate tags."""
         if len(value) != len(set(value)):
             raise serializers.ValidationError("Duplicate tags are not allowed.")
         return value
 
-    def validate(self, data):
-        if 'title' in data:
-            existing_posts = Post.objects.filter(title=data['title'])
+    def validate(self, attrs):
+        """Validate the post data."""
+        if 'title' in attrs:
+            existing_posts = Post.objects.filter(title=attrs['title'])
             if self.instance:
                 existing_posts = existing_posts.exclude(pk=self.instance.pk)
             if existing_posts.exists():
                 raise serializers.ValidationError({'title': "A post with this title already exists."})
-        return data
+        return attrs
 
     def validate_image(self, value):
+        """Validate the image format."""
         if value and not value.name.lower().endswith(('jpg', 'jpeg', 'png', 'gif', 'webp')):
             raise serializers.ValidationError("Invalid image format.")
         return value
 
     def create(self, validated_data):
+        """Create a new post."""
         request = self.context.get('request')
         if request and hasattr(request, 'user'):
             validated_data['author'] = request.user
@@ -93,12 +102,14 @@ class PostSerializer(serializers.ModelSerializer):
         return post
 
     def update(self, instance, validated_data):
+        """Update an existing post."""
         tags_data = validated_data.pop('tags', [])
         instance = super().update(instance, validated_data)
         self._process_tags(instance, tags_data)
         return instance
 
     def _process_tags(self, post, tags_data):
+        """Process the tags for a post."""
         content_type = ContentType.objects.get_for_model(Post)
 
         # Remove tags not in the new list
@@ -140,4 +151,5 @@ class LimitedPostSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'author', 'image_url']
 
     def get_image_url(self, obj):
-        return obj.image.url if obj.image else None
+        """Get the URL of the post's image."""
+        return obj.image.url if obj.image and hasattr(obj.image, 'url') else None

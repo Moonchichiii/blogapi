@@ -1,33 +1,38 @@
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db.models import Q, Count
+from django.http import Http404
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, permissions, status, serializers
-from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from backend.permissions import IsOwnerOrReadOnly
-from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import Post
-from .serializers import PostSerializer, LimitedPostSerializer, PostListSerializer
+from backend.permissions import IsOwnerOrReadOnly
 from .messages import STANDARD_MESSAGES
+from .models import Post
+from .serializers import LimitedPostSerializer, PostListSerializer, PostSerializer
 
 CACHE_TIMEOUT_LONG = 60 * 15
 CACHE_TIMEOUT_SHORT = 60 * 5
 DEFAULT_PAGE_SIZE = 10
 MAX_PAGE_SIZE = 100
 
+
 class PostCursorPagination(PageNumberPagination):
+    """Custom pagination class for posts."""
     page_size = DEFAULT_PAGE_SIZE
     page_size_query_param = 'page_size'
     max_page_size = MAX_PAGE_SIZE
 
+
 class PostPreviewList(generics.ListAPIView):
+    """API view to retrieve a list of post previews."""
     permission_classes = [permissions.AllowAny]
     pagination_class = PostCursorPagination
     serializer_class = LimitedPostSerializer
@@ -37,14 +42,17 @@ class PostPreviewList(generics.ListAPIView):
     ordering = ['-created_at']
 
     def get_queryset(self):
+        """Get the queryset for post previews."""
         return Post.objects.filter(is_approved=True).select_related('author').prefetch_related('tags').distinct()
-
 
     @method_decorator(cache_page(CACHE_TIMEOUT_LONG))
     def get(self, request, *args, **kwargs):
+        """Handle GET requests with caching."""
         return super().get(request, *args, **kwargs)
 
+
 class PostList(generics.ListCreateAPIView):
+    """API view to list and create posts."""
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     pagination_class = PostCursorPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -54,9 +62,11 @@ class PostList(generics.ListCreateAPIView):
     ordering = ['-created_at']
 
     def get_serializer_class(self):
+        """Get the appropriate serializer class based on the request method."""
         return PostListSerializer if self.request.method == 'GET' else PostSerializer
 
     def get_queryset(self):
+        """Get the queryset for posts."""
         queryset = Post.objects.select_related('author').prefetch_related(
             'tags', 'comments__author', 'ratings__user'
         ).annotate(
@@ -81,6 +91,7 @@ class PostList(generics.ListCreateAPIView):
         return queryset.distinct()
 
     def create(self, request, *args, **kwargs):
+        """Handle POST requests to create a new post."""
         serializer = self.get_serializer(data=request.data, context={'request': request})
         try:
             serializer.is_valid(raise_exception=True)
@@ -107,14 +118,17 @@ class PostList(generics.ListCreateAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def perform_create(self, serializer):
+        """Save the new post instance."""
         serializer.save()
 
     @method_decorator(cache_page(CACHE_TIMEOUT_LONG))
     def list(self, request, *args, **kwargs):
+        """Handle GET requests to list posts with caching."""
         return super().list(request, *args, **kwargs)
 
     @method_decorator(cache_page(CACHE_TIMEOUT_SHORT))
     def get(self, request, *args, **kwargs):
+        """Handle GET requests with caching and custom response."""
         response = super().get(request, *args, **kwargs)
         message = STANDARD_MESSAGES['POSTS_RETRIEVED_SUCCESS']
         return Response({
@@ -126,13 +140,16 @@ class PostList(generics.ListCreateAPIView):
             'type': message['type']
         })
 
+
 class PostDetail(generics.RetrieveUpdateDestroyAPIView):
+    """API view to retrieve, update, or delete a post."""
     queryset = Post.objects.all()
     serializer_class = PostSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def retrieve(self, request, *args, **kwargs):
+        """Handle GET requests to retrieve a post."""
         instance = self.get_object()
         user = request.user
         if not instance.is_approved and not (user == instance.author or user.is_staff or user.is_superuser):
@@ -152,6 +169,7 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
         })
 
     def update(self, request, *args, **kwargs):
+        """Handle PUT/PATCH requests to update a post."""
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
@@ -197,6 +215,7 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def destroy(self, request, *args, **kwargs):
+        """Handle DELETE requests to delete a post."""
         instance = self.get_object()
         if request.user == instance.author or request.user.is_superuser:
             self.perform_destroy(instance)
@@ -210,23 +229,30 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
                 'type': "error"
             }, status=status.HTTP_403_FORBIDDEN)
 
+
 class ApprovePost(generics.UpdateAPIView):
+    """API view to approve a post."""
     queryset = Post.objects.all()
     serializer_class = PostSerializer
     permission_classes = [permissions.IsAdminUser]
 
     def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
+        """Handle PUT requests to approve a post."""
         try:
-            serializer.is_valid(raise_exception=True)
-            self.perform_update(serializer)
+            instance = self.get_object()
+            instance.is_approved = True
+            instance.save()
+            serializer = self.get_serializer(instance)
             return Response({
                 'data': serializer.data,
                 'message': "The post has been approved successfully.",
                 'type': "success"
             })
+        except Http404:
+            return Response({
+                'message': "The post you are trying to approve does not exist.",
+                'type': "error"
+            }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({
                 'message': "An unexpected error occurred.",
@@ -235,12 +261,16 @@ class ApprovePost(generics.UpdateAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def perform_update(self, serializer):
+        """Save the approved post instance."""
         serializer.save(is_approved=True)
 
+
 class DisapprovePost(APIView):
+    """API view to disapprove a post."""
     permission_classes = [permissions.IsAdminUser]
 
     def post(self, request, pk):
+        """Handle POST requests to disapprove a post."""
         try:
             post = Post.objects.get(pk=pk)
         except Post.DoesNotExist:
