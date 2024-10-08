@@ -1,13 +1,16 @@
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
-from rest_framework import generics, status
+from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from .serializers import ProfileSerializer
 from .models import Profile
+from .serializers import PopularFollowerSerializer
 from backend.permissions import IsOwnerOrReadOnly
 from .messages import STANDARD_MESSAGES
+
+
 
 
 class ProfileList(generics.ListAPIView):
@@ -116,3 +119,11 @@ class CurrentUserProfile(generics.RetrieveUpdateAPIView):
             'message': STANDARD_MESSAGES['PROFILE_NOT_FOUND']['message'],
             'type': STANDARD_MESSAGES['PROFILE_NOT_FOUND']['type']
         }, status=status.HTTP_404_NOT_FOUND)
+
+class PopularFollowersView(generics.ListAPIView):
+    serializer_class = PopularFollowerSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user_id = self.kwargs['user_id']
+        return Profile.objects.filter(user__followers__follower_id=user_id).order_by('-popularity_score')[:10]

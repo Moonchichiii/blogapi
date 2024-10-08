@@ -62,3 +62,23 @@ class ProfileSerializer(serializers.ModelSerializer):
             instance.image = validated_data['image']
         instance.save()
         return instance
+
+
+class PopularFollowerSerializer(serializers.ModelSerializer):
+    profile_name = serializers.CharField(source='user.profile_name')
+    average_rating = serializers.SerializerMethodField()
+    post_count = serializers.SerializerMethodField()
+    tags = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Profile
+        fields = ['profile_name', 'image', 'average_rating', 'comment_count', 'post_count', 'popularity_score', 'tags']
+
+    def get_average_rating(self, obj):
+        return obj.user.posts.aggregate(Avg('average_rating'))['average_rating__avg'] or 0
+
+    def get_post_count(self, obj):
+        return obj.user.posts.count()
+
+    def get_tags(self, obj):
+        return obj.user.tags.values_list('name', flat=True)
