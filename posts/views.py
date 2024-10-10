@@ -1,12 +1,11 @@
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db.models import Q, Count, Avg
-from django.http import Http404
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import generics, permissions, status, serializers
+from rest_framework import generics, permissions, status
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -18,8 +17,8 @@ from .messages import STANDARD_MESSAGES
 from .models import Post
 from .serializers import LimitedPostSerializer, PostListSerializer, PostSerializer
 
+# Constants for cache timeout and pagination
 CACHE_TIMEOUT_LONG = 60 * 15
-CACHE_TIMEOUT_SHORT = 60 * 5
 DEFAULT_PAGE_SIZE = 10
 MAX_PAGE_SIZE = 100
 
@@ -46,9 +45,9 @@ class PostPreviewList(generics.ListAPIView):
         return Post.objects.filter(is_approved=True).select_related('author').prefetch_related('tags').distinct()
 
     @method_decorator(cache_page(CACHE_TIMEOUT_LONG))
-    def get(self, request, *args, **kwargs):
+    def list(self, request, *args, **kwargs):
         """Handle GET requests with caching."""
-        return super().get(request, *args, **kwargs)
+        return super().list(request, *args, **kwargs)
 
 
 class PostList(generics.ListCreateAPIView):
@@ -57,7 +56,7 @@ class PostList(generics.ListCreateAPIView):
     pagination_class = PostCursorPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['is_approved']
-    search_fields = ['title', 'content']
+    search_fields = ['title', 'content', 'author__profile_name']
     ordering_fields = ['created_at', 'updated_at']
     ordering = ['-created_at']
 
@@ -66,17 +65,18 @@ class PostList(generics.ListCreateAPIView):
         return PostListSerializer if self.request.method == 'GET' else PostSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset().annotate(
+        """Retrieve the queryset for posts with appropriate filters."""
+        queryset = Post.objects.all().annotate(
             comments_count=Count('comments'),
             tags_count=Count('tags'),
-            average_rating=Avg('ratings__value')
         ).select_related('author').prefetch_related('comments', 'tags', 'ratings')
-        
-        if self.request.user.is_authenticated:
-            if not (self.request.user.is_superuser or self.request.user.is_staff):
-                queryset = queryset.filter(Q(author=self.request.user) | Q(is_approved=True))
-        else:
+
+        user = self.request.user
+        if user.is_authenticated and not (user.is_superuser or user.is_staff):
+            queryset = queryset.filter(Q(author=user) | Q(is_approved=True))
+        elif not user.is_authenticated:
             queryset = queryset.filter(is_approved=True)
+        # Admin and staff see all posts
 
         search_query = self.request.query_params.get('search')
         if search_query:
@@ -88,55 +88,33 @@ class PostList(generics.ListCreateAPIView):
 
         return queryset.distinct()
 
-    def create(self, request, *args, **kwargs):
-        """Handle POST requests to create a new post."""
-        serializer = self.get_serializer(data=request.data, context={'request': request})
-        try:
-            serializer.is_valid(raise_exception=True)
-            self.perform_create(serializer)
-            headers = self.get_success_headers(serializer.data)
-            message = STANDARD_MESSAGES['POST_CREATED_SUCCESS']
-            return Response({
-                'data': serializer.data,
-                'message': message['message'],
-                'type': message['type']
-            }, status=status.HTTP_201_CREATED, headers=headers)
-        except serializers.ValidationError as e:
-            error_message = e.detail.get('title', [])[0] if 'title' in e.detail else "Failed to create the post. Please check the provided data."
-            return Response({
-                'message': error_message,
-                'type': "error",
-                'errors': e.detail
-            }, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({
-                'message': "An unexpected error occurred.",
-                'type': "error",
-                'errors': {'detail': str(e)}
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def perform_create(self, serializer):
-        """Save the new post instance."""
-        serializer.save()
-
     @method_decorator(cache_page(CACHE_TIMEOUT_LONG))
     def list(self, request, *args, **kwargs):
         """Handle GET requests to list posts with caching."""
-        return super().list(request, *args, **kwargs)
-
-    @method_decorator(cache_page(CACHE_TIMEOUT_SHORT))
-    def get(self, request, *args, **kwargs):
-        """Handle GET requests with caching and custom response."""
-        response = super().get(request, *args, **kwargs)
-        message = STANDARD_MESSAGES['POSTS_RETRIEVED_SUCCESS']
-        return Response({
-            'results': response.data['results'],
-            'next': response.data.get('next'),
-            'previous': response.data.get('previous'),
-            'count': response.data['count'],
-            'message': message['message'],
-            'type': message['type']
+        response = super().list(request, *args, **kwargs)
+        message = STANDARD_MESSAGES.get('POSTS_RETRIEVED_SUCCESS', {})
+        response.data.update({
+            'message': message.get('message', 'Posts retrieved successfully.'),
+            'type': message.get('type', 'success')
         })
+        return response
+
+    def create(self, request, *args, **kwargs):
+        """Handle POST requests to create a new post."""
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        message = STANDARD_MESSAGES.get('POST_CREATED_SUCCESS', {})
+        return Response({
+            'data': serializer.data,
+            'message': message.get('message', 'Post created successfully.'),
+            'type': message.get('type', 'success')
+        }, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer):
+        """Save the new post instance."""
+        serializer.save(author=self.request.user)
 
 
 class UnapprovedPostList(generics.ListAPIView):
@@ -152,7 +130,7 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
     """API view to retrieve, update, or delete a post."""
     queryset = Post.objects.all()
     serializer_class = PostSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def retrieve(self, request, *args, **kwargs):
@@ -163,68 +141,53 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
             return Response({
                 'message': "You do not have permission to view this post.",
                 'type': "error"
-            }, status=status.HTTP_404_NOT_FOUND)
+            }, status=status.HTTP_403_FORBIDDEN)
         serializer = self.get_serializer(instance, context={'request': request})
-        data = serializer.data
-        data['is_owner'] = user == instance.author
-        data['tagged_users'] = [tag.tagged_user.profile_name for tag in instance.tags.select_related('tagged_user')]
-        message = STANDARD_MESSAGES['POST_RETRIEVED_SUCCESS']
+        message = STANDARD_MESSAGES.get('POST_RETRIEVED_SUCCESS', {})
         return Response({
-            'data': data,
-            'message': message['message'],
-            'type': message['type']
+            'data': serializer.data,
+            'message': message.get('message', 'Post retrieved successfully.'),
+            'type': message.get('type', 'success')
         })
 
     def update(self, request, *args, **kwargs):
         """Handle PUT/PATCH requests to update a post."""
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
-        try:
-            serializer.is_valid(raise_exception=True)
-            user = self.request.user
-            if user.is_staff or user.is_superuser:
-                self.perform_update(serializer)
-                message = {
-                    'message': "Your post has been updated successfully.",
-                    'type': "success"
-                }
-            elif user == instance.author:
-                self.perform_update(serializer)
-                instance.is_approved = False
-                instance.save()
-                message = {
-                    'message': "Your post has been updated and is pending approval.",
-                    'type': "warning"
-                }
-            else:
-                return Response({
-                    'message': "You don't have permission to update this post.",
-                    'type': "error"
-                }, status=status.HTTP_403_FORBIDDEN)
+        user = request.user
+        if not (user == instance.author or user.is_staff or user.is_superuser):
+            return Response({
+                'message': "You don't have permission to update this post.",
+                'type': "error"
+            }, status=status.HTTP_403_FORBIDDEN)
 
-            return Response({
-                'data': serializer.data,
-                'message': message['message'],
-                'type': message['type']
-            })
-        except serializers.ValidationError as e:
-            return Response({
-                'message': "Failed to update the post. Please check your permissions or provided data.",
-                'type': "error",
-                'errors': e.detail
-            }, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({
-                'message': "An unexpected error occurred.",
-                'type': "error",
-                'errors': {'detail': str(e)}
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        if user == instance.author:
+            instance.is_approved = False  # Require re-approval
+            instance.save(update_fields=['is_approved'])
+            message = {
+                'message': "Your post has been updated and is pending approval.",
+                'type': "warning"
+            }
+        else:
+            message = {
+                'message': "Your post has been updated successfully.",
+                'type': "success"
+            }
+        return Response({
+            'data': serializer.data,
+            'message': message['message'],
+            'type': message['type']
+        })
 
     def destroy(self, request, *args, **kwargs):
         """Handle DELETE requests to delete a post."""
         instance = self.get_object()
-        if request.user == instance.author or request.user.is_superuser:
+        user = request.user
+        if user == instance.author or user.is_superuser:
             self.perform_destroy(instance)
             return Response({
                 'message': "Your post has been deleted successfully.",
@@ -245,31 +208,15 @@ class ApprovePost(generics.UpdateAPIView):
 
     def update(self, request, *args, **kwargs):
         """Handle PUT requests to approve a post."""
-        try:
-            instance = self.get_object()
-            instance.is_approved = True
-            instance.save()
-            serializer = self.get_serializer(instance)
-            return Response({
-                'data': serializer.data,
-                'message': "The post has been approved successfully.",
-                'type': "success"
-            })
-        except Http404:
-            return Response({
-                'message': "The post you are trying to approve does not exist.",
-                'type': "error"
-            }, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({
-                'message': "An unexpected error occurred.",
-                'type': "error",
-                'errors': {'detail': str(e)}
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def perform_update(self, serializer):
-        """Save the approved post instance."""
-        serializer.save(is_approved=True)
+        instance = self.get_object()
+        instance.is_approved = True
+        instance.save(update_fields=['is_approved'])
+        serializer = self.get_serializer(instance)
+        return Response({
+            'data': serializer.data,
+            'message': "The post has been approved successfully.",
+            'type': "success"
+        })
 
 
 class DisapprovePost(APIView):
@@ -293,28 +240,22 @@ class DisapprovePost(APIView):
                 'type': "error"
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            post.is_approved = False
-            post.save()
+        post.is_approved = False
+        post.save(update_fields=['is_approved'])
 
-            send_mail(
-                subject="Your post has been disapproved",
-                message=f"Your post titled '{post.title}' has been disapproved for the following reason: {reason}",
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[post.author.email],
-                fail_silently=False,
-            )
+        # Send email to the author
+        send_mail(
+            subject="Your post has been disapproved",
+            message=f"Your post titled '{post.title}' has been disapproved for the following reason: {reason}",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[post.author.email],
+            fail_silently=False,
+        )
 
-            serializer = PostSerializer(post, context={'request': request})
-            message = STANDARD_MESSAGES['POST_DISAPPROVED_SUCCESS']
-            return Response({
-                'data': serializer.data,
-                'message': message['message'],
-                'type': message['type']
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                'message': "An unexpected error occurred.",
-                'type': "error",
-                'errors': {'detail': str(e)}
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        serializer = PostSerializer(post, context={'request': request})
+        message = STANDARD_MESSAGES.get('POST_DISAPPROVED_SUCCESS', {})
+        return Response({
+            'data': serializer.data,
+            'message': message.get('message', 'Post disapproved successfully.'),
+            'type': message.get('type', 'success')
+        }, status=status.HTTP_200_OK)

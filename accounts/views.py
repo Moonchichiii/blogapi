@@ -27,6 +27,7 @@ class RegisterView(generics.CreateAPIView):
     def perform_create(self, serializer):
         user = serializer.save(is_active=False)
         self.send_activation_email(user)
+    
     def send_activation_email(self, user):
         token = account_activation_token.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
@@ -38,30 +39,39 @@ class RegisterView(generics.CreateAPIView):
 class ActivateAccountView(APIView):
     """Account activation"""
     permission_classes = [AllowAny]
+    
     def get(self, request, uidb64, token):
         try:
             uid = force_str(urlsafe_base64_decode(uidb64))
             user = User.objects.get(pk=uid)
         except (TypeError, ValueError, OverflowError, User.DoesNotExist):
             user = None
+        
         if user and account_activation_token.check_token(user, token):
             user.is_active = True
             user.save()
+
             refresh = RefreshToken.for_user(user)
             access_token = str(refresh.access_token)
             refresh_token = str(refresh)
+
             response = Response({
                 "message": "Your email has been successfully verified.",
                 "type": "success",
                 "user": UserSerializer(user, context={'request': request}).data
             }, status=status.HTTP_200_OK)
+
+            # Set tokens in cookies
             response.set_cookie('access_token', access_token, httponly=True, secure=request.is_secure())
             response.set_cookie('refresh_token', refresh_token, httponly=True, secure=request.is_secure())
+
             return response
+
         return Response({
             "message": "Invalid or expired activation link.",
             "type": "error"
         }, status=status.HTTP_400_BAD_REQUEST)
+
 
 class ResendVerificationEmailView(APIView):
     """Resend verification email"""

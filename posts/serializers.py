@@ -3,7 +3,6 @@ from rest_framework import serializers
 
 from accounts.models import CustomUser
 from comments.serializers import CommentSerializer
-from ratings.models import Rating
 from ratings.serializers import RatingSerializer
 from tags.models import ProfileTag
 from .models import Post
@@ -15,6 +14,7 @@ class PostListSerializer(serializers.ModelSerializer):
     is_owner = serializers.SerializerMethodField()
     comment_count = serializers.IntegerField(read_only=True)
     tag_count = serializers.IntegerField(read_only=True)
+    average_rating = serializers.FloatField(read_only=True)
 
     class Meta:
         model = Post
@@ -25,36 +25,24 @@ class PostListSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         return request.user == obj.author if request and request.user.is_authenticated else False
 
-    def to_representation(self, instance):
-        """Customize the representation of the post."""
-        representation = super().to_representation(instance)
-        representation['comment_count'] = instance.comments.count()
-        representation['tag_count'] = instance.tags.count()
-        return representation
-
 
 class PostSerializer(serializers.ModelSerializer):
     """Serializer for detailed post information."""
     author = serializers.CharField(source='author.profile_name', read_only=True)
     is_owner = serializers.SerializerMethodField()
     image = serializers.ImageField(required=False)
-    tags = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)    
-    tagged_users = serializers.SerializerMethodField(read_only=True)        
+    tags = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
+    tagged_users = serializers.SerializerMethodField(read_only=True)
     comments = CommentSerializer(many=True, read_only=True)
-    comments_count = serializers.IntegerField()
-    tags_count = serializers.IntegerField()
-    average_rating = serializers.FloatField()
+    comments_count = serializers.IntegerField(read_only=True)
+    tags_count = serializers.IntegerField(read_only=True)
+    average_rating = serializers.FloatField(source='average_rating', read_only=True)
 
     class Meta:
         model = Post
-        fields = ['id', 'title', 'content', 'image', 'author', 'created_at', 'comments_count', 'tags_count', 'average_rating']
-        
-    def get_tags(self, obj):
-        return [
-            {
-                'id': tag.id,
-                'tagged_user_name': tag.tagged_user.profile_name
-            } for tag in obj.tags.all()
+        fields = [
+            'id', 'title', 'content', 'image', 'author', 'created_at', 'comments',
+            'comments_count', 'tags_count', 'average_rating', 'is_owner', 'tagged_users'
         ]
 
     def get_is_owner(self, obj):
@@ -65,14 +53,6 @@ class PostSerializer(serializers.ModelSerializer):
     def get_tagged_users(self, obj):
         """Get the profile names of tagged users."""
         return [tag.tagged_user.profile_name for tag in obj.tags.all()]
-
-    def get_user_rating(self, obj):
-        """Get the rating given by the current user."""
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            rating = Rating.objects.filter(post=obj, user=request.user).first()
-            return RatingSerializer(rating).data if rating else None
-        return None
 
     def validate_tags(self, value):
         """Validate that there are no duplicate tags."""
@@ -91,16 +71,16 @@ class PostSerializer(serializers.ModelSerializer):
         return attrs
 
     def validate_image(self, value):
-        """Validate the image format."""
-        if value and not value.name.lower().endswith(('jpg', 'jpeg', 'png', 'gif', 'webp')):
-            raise serializers.ValidationError("Invalid image format.")
+        """Validate the image format and size."""
+        if value:
+            if not value.name.lower().endswith(('jpg', 'jpeg', 'png', 'gif', 'webp')):
+                raise serializers.ValidationError("Invalid image format.")
+            if value.size > 2 * 1024 * 1024:
+                raise serializers.ValidationError("Image must be less than 2MB.")
         return value
 
     def create(self, validated_data):
         """Create a new post."""
-        request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            validated_data['author'] = request.user
         tags_data = validated_data.pop('tags', [])
         post = Post.objects.create(**validated_data)
         self._process_tags(post, tags_data)

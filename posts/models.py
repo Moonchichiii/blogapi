@@ -1,10 +1,11 @@
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
-from django.db import connection, models
+from django.db import models
 from django.db.models import Avg, Count
 
 from cloudinary.models import CloudinaryField
 from tags.models import ProfileTag
+
 
 class Post(models.Model):
     """
@@ -50,7 +51,6 @@ class Post(models.Model):
     def __str__(self) -> str:
         return str(self.title)
 
-
     def update_rating_statistics(self):
         """
         Update the average rating and total ratings for the post.
@@ -63,16 +63,3 @@ class Post(models.Model):
         self.total_ratings = rating_stats['total_ratings']
         self.save(update_fields=['average_rating', 'total_ratings'])
         self.author.profile.update_popularity_score()
-
-    @staticmethod
-    def explain_query() -> list:
-        """
-        Explain the query plan for fetching approved posts ordered by creation date.
-        """
-        query_set = Post.objects.filter(is_approved=True).order_by('-created_at')
-        sql, params = query_set.query.sql_with_params()
-
-        with connection.cursor() as cursor:
-            cursor.execute(f"EXPLAIN {sql}", params)
-            result = cursor.fetchall()            
-            return result

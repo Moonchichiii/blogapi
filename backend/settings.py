@@ -25,6 +25,8 @@ CORS_ALLOW_HEADERS = [
     'origin', 'user-agent', 'x-csrftoken', 'x-requested-with'
 ]
 
+
+
 # Custom User Model
 AUTH_USER_MODEL = 'accounts.CustomUser'
 FRONTEND_URL = 'http://localhost:5173'
