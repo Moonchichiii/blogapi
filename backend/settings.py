@@ -45,22 +45,30 @@ LOGIN_REDIRECT_URL = 'two_factor:profile'
 TWO_FACTOR_PATCH_ADMIN = True
 
 # Cache Configuration
-if 'test' in sys.argv:
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
-        }
+# if 'test' in sys.argv:
+#     CACHES = {
+#         'default': {
+#             'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
+#         }
+#     }
+# else:
+    # CACHES = {
+    #     'default': {
+    #         'BACKEND': 'django_redis.cache.RedisCache',
+    #         'LOCATION': 'redis://127.0.0.1:6379/1',
+    #         'OPTIONS': {
+    #             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+    #         }
+    #     }
+    # }
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
     }
-else:
-    CACHES = {
-        'default': {
-            'BACKEND': 'django_redis.cache.RedisCache',
-            'LOCATION': 'redis://127.0.0.1:6379/1',
-            'OPTIONS': {
-                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            }
-        }
-    }
+}
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware', 'corsheaders.middleware.CorsMiddleware',
@@ -100,13 +108,26 @@ DATABASES = {
 # Password Validation
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'accounts.password_validation.MinimumLengthValidator',
-        'OPTIONS': {'min_length': 8},
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        'OPTIONS': {
+            'user_attributes': ('email', 'profile_name')
+        }
     },
-    {'NAME': 'accounts.password_validation.SymbolValidator'},
-    {'NAME': 'accounts.password_validation.UppercaseValidator'},
-    {'NAME': 'accounts.password_validation.NumberValidator'},
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {'min_length': 8}
+    },
+    {
+        'NAME': 'accounts.validators.SymbolValidator',
+    },
+    {
+        'NAME': 'accounts.validators.UppercaseValidator',
+    },
+    {
+        'NAME': 'accounts.validators.NumberValidator',
+    },
 ]
+
 
 # Cloudinary Configuration
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
@@ -174,7 +195,7 @@ REST_FRAMEWORK = {
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'ROTATE_REFRESH_TOKENS': False,
+    'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': False,
     'ALGORITHM': 'HS256',

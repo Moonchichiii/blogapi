@@ -1,11 +1,6 @@
 from django.utils.translation import gettext_lazy as _
 
-MESSAGE_TYPES = {
-    'SUCCESS': 'success',
-    'ERROR': 'error',
-    'WARNING': 'warning',
-    'INFO': 'info',
-}
+MESSAGE_TYPES = {'SUCCESS': 'success', 'ERROR': 'error', 'WARNING': 'warning', 'INFO': 'info'}
 
 STANDARD_MESSAGES = {
     'SUCCESS': {
@@ -27,35 +22,11 @@ STANDARD_MESSAGES = {
         'USERNAME_EXISTS': _("A user with this username already exists."),
         'INVALID_PASSWORD': _("This password is too weak. Please choose a stronger password."),
         '2FA_REQUIRED': _("Two-factor authentication is required for this account."),
-    },
-    'PASSWORD_TOO_SHORT': {
-        'type': MESSAGE_TYPES['ERROR'],
-        'message': _("This password must contain at least 8 characters."),
-    },
-    'PASSWORD_NO_SYMBOL': {
-        'type': MESSAGE_TYPES['ERROR'],
-        'message': _("The password must contain at least one symbol: !@#$%^&*(),.?\":{}|<>"),
-    },
-    'PASSWORD_NO_UPPER': {
-        'type': MESSAGE_TYPES['ERROR'],
-        'message': _("The password must contain at least one uppercase letter, A-Z."),
-    },
-    'PASSWORD_NO_NUMBER': {
-        'type': MESSAGE_TYPES['ERROR'],
-        'message': _("The password must contain at least one number, 0-9."),
+        'ACCOUNT_NOT_ACTIVATED': _("Your account is not activated. Please check your email for the activation link."),
     },
 }
 
-# New messages
 MESSAGES = {
     'EMAIL_VERIFICATION_LINK': _("Please verify your email using this link: {verification_link}"),
     'PASSWORD_RESET_LINK': _("Use this link to reset your password: {reset_link}"),
-    'ACCOUNT_NOT_ACTIVATED': _("Your account is not activated. Please check your email for the activation link."),
 }
-
-# Update STANDARD_MESSAGES with new messages
-STANDARD_MESSAGES['INFO'] = {
-    'EMAIL_VERIFICATION_LINK': MESSAGES['EMAIL_VERIFICATION_LINK'],
-    'PASSWORD_RESET_LINK': MESSAGES['PASSWORD_RESET_LINK'],
-}
-STANDARD_MESSAGES['ERROR']['ACCOUNT_NOT_ACTIVATED'] = MESSAGES['ACCOUNT_NOT_ACTIVATED']

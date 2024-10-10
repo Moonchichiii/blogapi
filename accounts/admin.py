@@ -2,10 +2,8 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import CustomUser
 
-
-# Register your models here.
-
 class CustomUserAdmin(UserAdmin):
+    """Admin panel configuration for CustomUser."""
     model = CustomUser
     list_display = ('email', 'profile_name', 'is_staff', 'is_active')
     list_filter = ('is_staff', 'is_active')

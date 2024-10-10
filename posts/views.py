@@ -70,7 +70,8 @@ class PostList(generics.ListCreateAPIView):
             comments_count=Count('comments'),
             tags_count=Count('tags'),
             average_rating=Avg('ratings__value')
-        )
+        ).select_related('author').prefetch_related('comments', 'tags', 'ratings')
+        
         if self.request.user.is_authenticated:
             if not (self.request.user.is_superuser or self.request.user.is_staff):
                 queryset = queryset.filter(Q(author=self.request.user) | Q(is_approved=True))

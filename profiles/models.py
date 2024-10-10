@@ -6,7 +6,7 @@ from cloudinary.models import CloudinaryField
 
 class Profile(models.Model):
     """
-    Model to store user profile information.
+    Stores user profile information.
     """
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -35,7 +35,7 @@ class Profile(models.Model):
 
     def clean(self) -> None:
         """
-        Custom validation to ensure image size is within limits.
+        Validates image size.
         """
         super().clean()
         if self.image and self.image.size > 2 * 1024 * 1024:
@@ -43,11 +43,11 @@ class Profile(models.Model):
 
     def update_popularity_score(self) -> None:
         """
-        Update the popularity score based on various metrics.
+        Updates the popularity score based on various metrics.
         """
         posts = self.user.posts.all()
         avg_rating = posts.aggregate(Avg('average_rating'))['average_rating__avg'] or 0
-        total_ratings = posts.aggregate(Sum('total_ratings'))['total_ratings'] or 0
+        total_ratings = posts.aggregate(Sum('total_ratings'))['total_ratings__sum'] or 0
         comment_count = self.user.comments.count()
         tag_count = self.user.tags.count()
         follower_count = self.follower_count
@@ -63,7 +63,7 @@ class Profile(models.Model):
 
     def update_counts(self) -> None:
         """
-        Update follower, following, comment, and tag counts.
+        Updates follower, following, comment, and tag counts.
         """
         self.follower_count = self.user.followers.count()
         self.following_count = self.user.following.count()
@@ -78,29 +78,16 @@ class Profile(models.Model):
             ]
         )
 
-    def update_rating_statistics(self) -> None:
-        """
-        Update the average rating and total ratings for the post.
-        """
-        rating_stats = self.ratings.aggregate(
-            avg_rating=Avg('value'),
-            total_ratings=Count('id')
-        )
-        self.average_rating = rating_stats['avg_rating'] or 0
-        self.total_ratings = rating_stats['total_ratings']
-        self.save(update_fields=['average_rating', 'total_ratings'])
-        self.author.profile.update_popularity_score()
-
     @classmethod
     def update_all_popularity_scores(cls) -> None:
         """
-        Update popularity scores for all profiles asynchronously.
+        Updates popularity scores for all profiles asynchronously.
         """
         from .tasks import update_all_popularity_scores
         update_all_popularity_scores.delay()
 
     def __str__(self) -> str:
         """
-        String representation of the Profile model.
+        Returns string representation of the Profile model.
         """
         return f"{self.user.profile_name}'s profile"

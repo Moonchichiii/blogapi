@@ -7,15 +7,18 @@ from ratings.models import Rating
 User = get_user_model()
 
 @receiver(post_save, sender=User)
-def create_user_profile(sender, instance, created, **kwargs):
+def create_or_update_user_profile(sender, instance, created, **kwargs):
+    """
+    Create or update the user profile when a User instance is created or updated.
+    """
     if created:
-        Profile.objects.get_or_create(user=instance)
-
-@receiver(post_save, sender=User)
-def save_user_profile(sender, instance, **kwargs):
+        Profile.objects.create(user=instance)
     instance.profile.save()
 
 @receiver(post_save, sender=Rating)
 @receiver(post_delete, sender=Rating)
 def update_profile_on_rating_change(sender, instance, **kwargs):
+    """
+    Update the author's profile popularity score when a Rating instance is saved or deleted.
+    """
     instance.post.author.profile.update_popularity_score()

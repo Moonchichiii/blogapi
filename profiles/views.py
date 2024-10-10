@@ -27,6 +27,7 @@ class ProfileList(generics.ListAPIView):
     def get_queryset(self):
         return Profile.objects.all().order_by('-popularity_score', '-follower_count')
 
+
 class ProfileDetail(generics.RetrieveAPIView):
     """Retrieve a specific profile by user ID."""
     serializer_class = ProfileSerializer
@@ -50,39 +51,22 @@ class ProfileDetail(generics.RetrieveAPIView):
                 'type': "error"
             }, status=status.HTTP_404_NOT_FOUND)
 
-class CurrentUserProfile(generics.RetrieveUpdateAPIView):
+
+class CurrentUserProfileView(generics.RetrieveUpdateAPIView):
     """Retrieve or update the current user's profile."""
     serializer_class = ProfileSerializer
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
     def get_object(self):
         return self.request.user.profile
 
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
+    def perform_update(self, serializer):
+        serializer.save()
         return Response({
-            'message': "Profile retrieved successfully.",
+            'message': "Profile updated successfully.",
             'type': "success",
             'data': serializer.data
         })
-
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        if serializer.is_valid():
-            self.perform_update(serializer)
-            return Response({
-                'message': "Profile updated successfully.",
-                'type': "success",
-                'data': serializer.data
-            })
-        return Response({
-            'message': "Failed to update profile.",
-            'type': "error",
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
 
 class PopularFollowersView(generics.ListAPIView):
     """List popular followers of a user."""
