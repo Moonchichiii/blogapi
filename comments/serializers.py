@@ -19,9 +19,7 @@ class CommentSerializer(serializers.ModelSerializer):
         ]
 
     def get_author_image(self, obj):
-        if obj.author.profile.image:
-            return obj.author.profile.image.url
-        return None
+        return obj.author.profile.image.url if obj.author.profile.image else None
 
     def to_representation(self, instance):
         """

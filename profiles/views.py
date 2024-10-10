@@ -7,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from .serializers import ProfileSerializer, PopularFollowerSerializer
 from .models import Profile
 from backend.permissions import IsOwnerOrReadOnly
-from .messages import MESSAGES
+
 
 class ProfileList(generics.ListAPIView):
     """List all profiles with caching."""

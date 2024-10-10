@@ -5,6 +5,15 @@ from .serializers import FollowSerializer
 from .messages import STANDARD_MESSAGES
 
 
+class FollowerListView(generics.ListAPIView):
+    serializer_class = FollowSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user_id = self.kwargs['user_id']
+        return Follow.objects.filter(followed_id=user_id)
+
+
 class FollowUnfollowView(generics.CreateAPIView, generics.DestroyAPIView):
     """
     API view to handle following and unfollowing users.
