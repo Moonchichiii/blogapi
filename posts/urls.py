@@ -1,5 +1,12 @@
 from django.urls import path
-from .views import PostPreviewList, PostList, PostDetail, ApprovePost, DisapprovePost
+from .views import (
+    PostPreviewList,
+    PostList,
+    PostDetail,
+    ApprovePost,
+    DisapprovePost,
+    UnapprovedPostList
+)
 
 urlpatterns = [
     path('posts/previews/', PostPreviewList.as_view(), name='post-previews'),
@@ -7,4 +14,5 @@ urlpatterns = [
     path('posts/<int:pk>/', PostDetail.as_view(), name='post-detail'),
     path('posts/<int:pk>/approve/', ApprovePost.as_view(), name='approve-post'),
     path('posts/<int:pk>/disapprove/', DisapprovePost.as_view(), name='disapprove-post'),
+    path('posts/unapproved/', UnapprovedPostList.as_view(), name='unapproved-posts'),
 ]

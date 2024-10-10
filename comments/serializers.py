@@ -6,22 +6,22 @@ from rest_framework import serializers
 from .models import Comment
 
 class CommentSerializer(serializers.ModelSerializer):
-    """
-    Serializer for the Comment model.
-    """
     author = serializers.CharField(source='author.profile_name', read_only=True)
+    author_image = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
         fields = [
-            'id', 'post', 'author', 'content', 'created_at', 'updated_at'
+            'id', 'post', 'author', 'author_image', 'content', 'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'author', 'created_at', 'updated_at'
         ]
-        extra_kwargs = {
-            'post': {'required': False, 'write_only': True}
-        }
+
+    def get_author_image(self, obj):
+        if obj.author.profile.image:
+            return obj.author.profile.image.url
+        return None
 
     def to_representation(self, instance):
         """

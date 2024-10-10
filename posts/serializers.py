@@ -38,19 +38,24 @@ class PostSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.profile_name', read_only=True)
     is_owner = serializers.SerializerMethodField()
     image = serializers.ImageField(required=False)
-    tags = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
-    average_rating = serializers.FloatField(read_only=True)
-    tagged_users = serializers.SerializerMethodField(read_only=True)
-    comment_count = serializers.IntegerField(read_only=True)
-    tag_count = serializers.IntegerField(read_only=True)
+    tags = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)    
+    tagged_users = serializers.SerializerMethodField(read_only=True)        
     comments = CommentSerializer(many=True, read_only=True)
+    comments_count = serializers.IntegerField()
+    tags_count = serializers.IntegerField()
+    average_rating = serializers.FloatField()
 
     class Meta:
         model = Post
-        fields = '__all__'
-        extra_kwargs = {
-            'author': {'read_only': True},
-        }
+        fields = ['id', 'title', 'content', 'image', 'author', 'created_at', 'comments_count', 'tags_count', 'average_rating']
+        
+    def get_tags(self, obj):
+        return [
+            {
+                'id': tag.id,
+                'tagged_user_name': tag.tagged_user.profile_name
+            } for tag in obj.tags.all()
+        ]
 
     def get_is_owner(self, obj):
         """Check if the current user is the owner of the post."""

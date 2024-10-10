@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Avg
 from django.http import Http404
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
@@ -66,14 +66,11 @@ class PostList(generics.ListCreateAPIView):
         return PostListSerializer if self.request.method == 'GET' else PostSerializer
 
     def get_queryset(self):
-        """Get the queryset for posts."""
-        queryset = Post.objects.select_related('author').prefetch_related(
-            'tags', 'comments__author', 'ratings__user'
-        ).annotate(
-            comment_count=Count('comments', distinct=True),
-            rating_count=Count('ratings', distinct=True)
+        queryset = super().get_queryset().annotate(
+            comments_count=Count('comments'),
+            tags_count=Count('tags'),
+            average_rating=Avg('ratings__value')
         )
-
         if self.request.user.is_authenticated:
             if not (self.request.user.is_superuser or self.request.user.is_staff):
                 queryset = queryset.filter(Q(author=self.request.user) | Q(is_approved=True))
@@ -139,6 +136,15 @@ class PostList(generics.ListCreateAPIView):
             'message': message['message'],
             'type': message['type']
         })
+
+
+class UnapprovedPostList(generics.ListAPIView):
+    """List all unapproved posts for staff and superusers."""
+    serializer_class = PostListSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_queryset(self):
+        return Post.objects.filter(is_approved=False).select_related('author').prefetch_related('tags').distinct()
 
 
 class PostDetail(generics.RetrieveUpdateDestroyAPIView):
