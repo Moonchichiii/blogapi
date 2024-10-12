@@ -1,24 +1,24 @@
 from django.conf import settings
-from django.contrib.auth import get_user_model, authenticate
+from django.contrib.auth import get_user_model, authenticate, login
 from django.core.mail import send_mail
+from django.utils.decorators import method_decorator
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils.translation import gettext as _
 from django_otp.plugins.otp_totp.models import TOTPDevice
-from rest_framework import generics, status
+from rest_framework import generics, status, serializers
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
+from django.core.signing import TimestampSigner, BadSignature
+
 from .serializers import UserRegistrationSerializer, LoginSerializer, UserSerializer
 from .tokens import account_activation_token
 from .messages import STANDARD_MESSAGES
-# from .models import CustomUser
 
 User = get_user_model()
-
-
 
 class RegisterView(generics.CreateAPIView):
     """User registration"""
@@ -37,41 +37,37 @@ class RegisterView(generics.CreateAPIView):
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
 
 class ActivateAccountView(APIView):
-    """Account activation"""
     permission_classes = [AllowAny]
-    
+   
     def get(self, request, uidb64, token):
         try:
             uid = force_str(urlsafe_base64_decode(uidb64))
             user = User.objects.get(pk=uid)
         except (TypeError, ValueError, OverflowError, User.DoesNotExist):
             user = None
-        
+       
         if user and account_activation_token.check_token(user, token):
             user.is_active = True
             user.save()
+            login(request, user)
 
             refresh = RefreshToken.for_user(user)
-            access_token = str(refresh.access_token)
-            refresh_token = str(refresh)
+            signer = TimestampSigner()
+            setup_2fa_token = signer.sign(str(user.pk))
 
-            response = Response({
+            return Response({
                 "message": "Your email has been successfully verified.",
                 "type": "success",
-                "user": UserSerializer(user, context={'request': request}).data
+                "user": UserSerializer(user, context={'request': request}).data,
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "setup_2fa_token": setup_2fa_token
             }, status=status.HTTP_200_OK)
-
-            # Set tokens in cookies
-            response.set_cookie('access_token', access_token, httponly=True, secure=request.is_secure())
-            response.set_cookie('refresh_token', refresh_token, httponly=True, secure=request.is_secure())
-
-            return response
 
         return Response({
             "message": "Invalid or expired activation link.",
             "type": "error"
         }, status=status.HTTP_400_BAD_REQUEST)
-
 
 class ResendVerificationEmailView(APIView):
     """Resend verification email"""
@@ -101,7 +97,6 @@ class ResendVerificationEmailView(APIView):
         }, status=status.HTTP_200_OK)
 
 class SetupTwoFactorView(APIView):
-    """Set up 2FA"""
     permission_classes = [IsAuthenticated]
     def post(self, request):
         user = request.user
@@ -113,7 +108,7 @@ class SetupTwoFactorView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
         device = TOTPDevice.objects.create(user=user, name="default")
         return Response({
-            "message": STANDARD_MESSAGES['SUCCESS']['2FA_SETUP'],
+            "message": "Two-factor authentication setup successful.",
             "type": "success",
             "config_url": device.config_url,
             "secret_key": device.key

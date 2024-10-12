@@ -3,6 +3,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 class Rating(models.Model):
+    """Store ratings for posts."""
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='ratings')
     post = models.ForeignKey('posts.Post', on_delete=models.CASCADE, related_name='ratings')
     value = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])

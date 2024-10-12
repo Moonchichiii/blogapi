@@ -1,104 +1,59 @@
-from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import Prefetch
-from django.http import Http404
 from rest_framework import generics, permissions, status
-from rest_framework.pagination import LimitOffsetPagination
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
-
-from backend.permissions import IsOwnerOrReadOnly
+from rest_framework.permissions import IsAdminUser
 from posts.models import Post
-from .messages import STANDARD_MESSAGES
 from .models import Comment
 from .serializers import CommentSerializer
 
-
-class CommentPagination(LimitOffsetPagination):
+class CommentPagination(PageNumberPagination):
     """Pagination settings for comments."""
-    default_limit: int = 10
-    max_limit: int = 50
-
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 class CommentList(generics.ListCreateAPIView):
-    """
-    View to list all comments for a specific post and create a new comment.
-    """
+    """List and create comments for a specific post."""
     serializer_class = CommentSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     pagination_class = CommentPagination
 
-    def get_queryset(self) -> list[Comment]:
-        """
-        Get the queryset of comments for a specific post.
-        """
-        post_id = self.kwargs['post_id']
+    def get_queryset(self):
+        """Return comments for the specified post."""
+        return Comment.objects.filter(post=self.kwargs['post_id']).select_related('author')
+
+    def perform_create(self, serializer):
+        """Save the comment with the current user as the author."""
         try:
-            post = Post.objects.prefetch_related(
-                Prefetch(
-                    'comments',
-                    queryset=Comment.objects.select_related('author').order_by('-created_at'),
-                    to_attr='prefetched_comments'
-                )
-            ).get(pk=post_id)
-        except Post.DoesNotExist as exc:
-            raise Http404(STANDARD_MESSAGES['POST_NOT_FOUND']['message']) from exc
-        return post.prefetched_comments
-
-    def list(self, request, *args, **kwargs) -> Response:
-        """
-        List all comments for a specific post with pagination.
-        """
-        queryset = self.get_queryset()
-        page = self.paginate_queryset(queryset)
-        serializer = self.get_serializer(queryset, many=True)
-
-        if page is not None:
-            paginated_response = self.get_paginated_response(serializer.data)
-            paginated_response.data['message'] = STANDARD_MESSAGES['COMMENTS_RETRIEVED_SUCCESS']['message']
-            paginated_response.data['type'] = STANDARD_MESSAGES['COMMENTS_RETRIEVED_SUCCESS']['type']
-            return paginated_response
-
-        return Response({
-            'data': serializer.data,
-            'message': STANDARD_MESSAGES['COMMENTS_RETRIEVED_SUCCESS']['message'],
-            'type': STANDARD_MESSAGES['COMMENTS_RETRIEVED_SUCCESS']['type']
-        })
-
-    def create(self, request, *args, **kwargs) -> Response:
-        """
-        Create a new comment for a specific post.
-        """
-        post_id = self.kwargs['post_id']
-        try:
-            post = Post.objects.get(pk=post_id)
-        except Post.DoesNotExist as exc:
-            raise Http404(STANDARD_MESSAGES['POST_NOT_FOUND']['message']) from exc
-
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(author=self.request.user, post=post)
-        headers = self.get_success_headers(serializer.data)
-        return Response({
-            'data': serializer.data,
-            'message': STANDARD_MESSAGES['COMMENT_CREATED_SUCCESS']['message'],
-            'type': STANDARD_MESSAGES['COMMENT_CREATED_SUCCESS']['type']
-        }, status=status.HTTP_201_CREATED, headers=headers)
-
+            post = Post.objects.get(pk=self.kwargs['post_id'])
+            serializer.save(author=self.request.user, post=post)
+            return Response({'message': 'Comment created successfully.', 'type': 'success'}, status=status.HTTP_201_CREATED)
+        except Post.DoesNotExist:
+            return Response({'message': 'Post not found.', 'type': 'error'}, status=status.HTTP_404_NOT_FOUND)
 
 class CommentDetail(generics.RetrieveUpdateDestroyAPIView):
-    """
-    View to retrieve, update, or delete a specific comment.
-    """
+    """Retrieve, update, or delete a comment."""
     queryset = Comment.objects.select_related('author', 'post')
     serializer_class = CommentSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-    def retrieve(self, request, *args, **kwargs) -> Response:
-        """
-        Retrieve a specific comment with a success message.
-        """
+class ModerateComment(generics.UpdateAPIView):
+    """Approve or disapprove a comment."""
+    queryset = Comment.objects.all()
+    serializer_class = CommentSerializer
+    permission_classes = [IsAdminUser]
+
+    def update(self, request, *args, **kwargs):
+        """Update the approval status of a comment."""
         instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response({
-            'data': serializer.data,
-            'message': STANDARD_MESSAGES['COMMENT_RETRIEVED_SUCCESS']['message']
-        })
+        action = request.data.get('action')
+        if action == 'approve':
+            instance.is_approved = True
+            instance.save()
+            return Response({'message': 'Comment approved successfully.', 'type': 'success'}, status=status.HTTP_200_OK)
+        elif action == 'disapprove':
+            instance.is_approved = False
+            instance.save()
+            return Response({'message': 'Comment disapproved successfully.', 'type': 'success'}, status=status.HTTP_200_OK)
+        else:
+            return Response({'message': 'Invalid action provided.', 'type': 'error'}, status=status.HTTP_400_BAD_REQUEST)

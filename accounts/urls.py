@@ -11,6 +11,7 @@ from .views import (
     SetupTwoFactorView,
     AccountDeletionView,
     CustomTokenRefreshView,
+    
 )
 
 urlpatterns = [
@@ -24,6 +25,7 @@ urlpatterns = [
         path('', auth_views.PasswordResetView.as_view(), name='password_reset'),
         path('done/', auth_views.PasswordResetDoneView.as_view(), name='password_reset_done'),
         path('<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
+    
         path('complete/', auth_views.PasswordResetCompleteView.as_view(), name='password_reset_complete'),
     ])),
     path('resend-verification/', ResendVerificationEmailView.as_view(), name='resend_verification'),

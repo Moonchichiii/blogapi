@@ -1,3 +1,4 @@
+from rest_framework.response import Response
 from django.utils.translation import gettext_lazy as _
 
 # Define message types
@@ -10,7 +11,6 @@ MESSAGE_TYPES = {
 
 # Define standard messages for profile operations
 STANDARD_MESSAGES = {
-    # Success Messages
     'PROFILE_RETRIEVED_SUCCESS': {
         'type': MESSAGE_TYPES['SUCCESS'],
         'message': _("Profile retrieved successfully."),
@@ -23,16 +23,6 @@ STANDARD_MESSAGES = {
         'type': MESSAGE_TYPES['SUCCESS'],
         'message': _("Profile image updated successfully."),
     },
-    'PROFILE_FOLLOWED_SUCCESS': {
-        'type': MESSAGE_TYPES['SUCCESS'],
-        'message': _("Profile followed successfully."),
-    },
-    'PROFILE_UNFOLLOWED_SUCCESS': {
-        'type': MESSAGE_TYPES['SUCCESS'],
-        'message': _("Profile unfollowed successfully."),
-    },
-
-    # Error Messages
     'PROFILE_NOT_FOUND': {
         'type': MESSAGE_TYPES['ERROR'],
         'message': _("Profile not found. Please try again."),
@@ -65,14 +55,10 @@ STANDARD_MESSAGES = {
         'type': MESSAGE_TYPES['ERROR'],
         'message': _("Bio length should not exceed 500 characters."),
     },
-
-    # Warning Messages
     'PROFILE_INCOMPLETE_WARNING': {
         'type': MESSAGE_TYPES['WARNING'],
         'message': _("Your profile is incomplete. Please update your profile."),
     },
-
-    # Information Messages
     'PROFILE_PUBLIC_INFO': {
         'type': MESSAGE_TYPES['INFO'],
         'message': _("This profile is public and visible to everyone."),
@@ -82,3 +68,23 @@ STANDARD_MESSAGES = {
         'message': _("This profile is private and only visible to followers."),
     },
 }
+
+def profile_success_response(message_key: str, data: dict = None):
+    """
+    Helper function to create a success response for profile-related operations.
+    
+    Args:
+        message_key (str): The key from the STANDARD_MESSAGES dict.
+        data (dict): The data to include in the response.
+
+    Returns:
+        Response: A formatted success response.
+    """
+    message = STANDARD_MESSAGES.get(message_key, {})
+    response_data = {
+        'message': message.get('message', 'Action completed successfully.'),
+        'type': message.get('type', 'success')
+    }
+    if data:
+        response_data['data'] = data
+    return Response(response_data)

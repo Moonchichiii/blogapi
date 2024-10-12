@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db.models import Q, Count, Avg
+from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 
@@ -17,11 +17,9 @@ from .messages import STANDARD_MESSAGES
 from .models import Post
 from .serializers import LimitedPostSerializer, PostListSerializer, PostSerializer
 
-# Constants for cache timeout and pagination
 CACHE_TIMEOUT_LONG = 60 * 15
 DEFAULT_PAGE_SIZE = 10
 MAX_PAGE_SIZE = 100
-
 
 class PostCursorPagination(PageNumberPagination):
     """Custom pagination class for posts."""
@@ -29,9 +27,8 @@ class PostCursorPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = MAX_PAGE_SIZE
 
-
 class PostPreviewList(generics.ListAPIView):
-    """API view to retrieve a list of post previews."""
+    """List preview of posts."""
     permission_classes = [permissions.AllowAny]
     pagination_class = PostCursorPagination
     serializer_class = LimitedPostSerializer
@@ -40,15 +37,12 @@ class PostPreviewList(generics.ListAPIView):
     ordering_fields = ['created_at']
     ordering = ['-created_at']
 
-    def get_queryset(self):
-        """Get the queryset for post previews."""
-        return Post.objects.filter(is_approved=True).select_related('author').prefetch_related('tags').distinct()
-
     @method_decorator(cache_page(CACHE_TIMEOUT_LONG))
     def list(self, request, *args, **kwargs):
-        """Handle GET requests with caching."""
         return super().list(request, *args, **kwargs)
 
+    def get_queryset(self):
+        return Post.objects.filter(is_approved=True).select_related('author').prefetch_related('tags').distinct()
 
 class PostList(generics.ListCreateAPIView):
     """API view to list and create posts."""
@@ -61,22 +55,15 @@ class PostList(generics.ListCreateAPIView):
     ordering = ['-created_at']
 
     def get_serializer_class(self):
-        """Get the appropriate serializer class based on the request method."""
         return PostListSerializer if self.request.method == 'GET' else PostSerializer
 
     def get_queryset(self):
-        """Retrieve the queryset for posts with appropriate filters."""
-        queryset = Post.objects.all().annotate(
-            comments_count=Count('comments'),
-            tags_count=Count('tags'),
-        ).select_related('author').prefetch_related('comments', 'tags', 'ratings')
-
+        queryset = Post.objects.all().select_related('author').prefetch_related('tags', 'ratings')
         user = self.request.user
         if user.is_authenticated and not (user.is_superuser or user.is_staff):
             queryset = queryset.filter(Q(author=user) | Q(is_approved=True))
-        elif not user.is_authenticated:
+        else:
             queryset = queryset.filter(is_approved=True)
-        # Admin and staff see all posts
 
         search_query = self.request.query_params.get('search')
         if search_query:
@@ -85,12 +72,10 @@ class PostList(generics.ListCreateAPIView):
                 Q(content__icontains=search_query) |
                 Q(author__profile_name__icontains=search_query)
             )
-
         return queryset.distinct()
 
     @method_decorator(cache_page(CACHE_TIMEOUT_LONG))
     def list(self, request, *args, **kwargs):
-        """Handle GET requests to list posts with caching."""
         response = super().list(request, *args, **kwargs)
         message = STANDARD_MESSAGES.get('POSTS_RETRIEVED_SUCCESS', {})
         response.data.update({
@@ -100,7 +85,6 @@ class PostList(generics.ListCreateAPIView):
         return response
 
     def create(self, request, *args, **kwargs):
-        """Handle POST requests to create a new post."""
         serializer = self.get_serializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -113,9 +97,7 @@ class PostList(generics.ListCreateAPIView):
         }, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
-        """Save the new post instance."""
         serializer.save(author=self.request.user)
-
 
 class UnapprovedPostList(generics.ListAPIView):
     """List all unapproved posts for staff and superusers."""
@@ -124,7 +106,6 @@ class UnapprovedPostList(generics.ListAPIView):
 
     def get_queryset(self):
         return Post.objects.filter(is_approved=False).select_related('author').prefetch_related('tags').distinct()
-
 
 class PostDetail(generics.RetrieveUpdateDestroyAPIView):
     """API view to retrieve, update, or delete a post."""
@@ -166,7 +147,7 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
         self.perform_update(serializer)
 
         if user == instance.author:
-            instance.is_approved = False  # Require re-approval
+            instance.is_approved = False
             instance.save(update_fields=['is_approved'])
             message = {
                 'message': "Your post has been updated and is pending approval.",
@@ -199,7 +180,6 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
                 'type': "error"
             }, status=status.HTTP_403_FORBIDDEN)
 
-
 class ApprovePost(generics.UpdateAPIView):
     """API view to approve a post."""
     queryset = Post.objects.all()
@@ -217,7 +197,6 @@ class ApprovePost(generics.UpdateAPIView):
             'message': "The post has been approved successfully.",
             'type': "success"
         })
-
 
 class DisapprovePost(APIView):
     """API view to disapprove a post."""
