@@ -31,7 +31,9 @@ class ProfileList(generics.ListAPIView):
     pagination_class = CustomPagination
 
     def get_queryset(self):
-        """Get the queryset for profiles ordered by popularity and follower count."""
+        """
+        Get the queryset for profiles ordered by popularity and follower count.
+        """
         return Profile.objects.prefetch_related('user__followers').order_by(
             '-popularity_score', '-follower_count'
         )
@@ -48,12 +50,18 @@ class ProfileList(generics.ListAPIView):
         return Response(serializer.data)
 
 
-class ProfileDetail(generics.RetrieveAPIView):
-    """API view to retrieve a profile by user ID."""
+class ProfileDetail(generics.RetrieveUpdateAPIView):
+    """API view to retrieve and update a profile."""
     serializer_class = ProfileSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsOwnerOrReadOnly]
     lookup_field = 'user_id'
     queryset = Profile.objects.select_related('user').prefetch_related('user__posts')
+
+    def get_serializer_context(self):
+        """Get serializer context with request data."""
+        context = super().get_serializer_context()
+        context.update({"request": self.request})
+        return context
 
     def retrieve(self, request, *args, **kwargs):
         """Retrieve a profile and hide email if not the owner."""
@@ -63,7 +71,32 @@ class ProfileDetail(generics.RetrieveAPIView):
         if request.user != instance.user:
             data.pop('email', None)
         return Response(
-            {'data': data, 'message': 'Profile retrieved successfully.', 'type': 'success'},
+            {
+                'data': data,
+                'message': 'Profile retrieved successfully.',
+                'type': 'success'
+            },
+            status=status.HTTP_200_OK
+        )
+
+    def patch(self, request, *args, **kwargs):
+        """Partially update a profile."""
+        partial = kwargs.pop('partial', True)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        # Refresh the instance to get updated data
+        instance.refresh_from_db()
+        updated_serializer = self.get_serializer(instance)
+        
+        return Response(
+            {
+                'data': updated_serializer.data,
+                'message': 'Profile updated successfully.',
+                'type': 'success'
+            },
             status=status.HTTP_200_OK
         )
 

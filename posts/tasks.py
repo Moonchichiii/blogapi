@@ -1,18 +1,22 @@
 from celery import shared_task
-import logging
 from .models import Post
-
-logger = logging.getLogger(__name__)
+from profiles.models import Profile
 
 @shared_task
 def update_post_stats(post_id):
     try:
         post = Post.objects.get(id=post_id)
         post.update_rating_statistics()
+        
+        # Update the author's profile popularity score
+        profile = Profile.objects.get(user=post.author)
+        profile.update_popularity_score()
     except Post.DoesNotExist:
-        logger.error(f"Post with ID {post_id} does not exist.")
+        print(f"Post with ID {post_id} does not exist.")
+    except Profile.DoesNotExist:
+        print(f"Profile for post author (Post ID: {post_id}) does not exist.")
     except Exception as e:
-        logger.error(f"Error updating post stats for post ID {post_id}: {str(e)}")
+        print(f"Error updating post stats for post ID {post_id}: {str(e)}")
 
 @shared_task
 def send_email_task(subject, message, recipient_list):

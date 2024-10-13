@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from django.urls import reverse
+from rest_framework.exceptions import ValidationError
 
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, permissions, status
@@ -18,6 +19,7 @@ from rest_framework.views import APIView
 from backend.permissions import IsOwnerOrReadOnly
 from .messages import STANDARD_MESSAGES
 from .models import Post
+from comments.serializers import CommentSerializer
 from .serializers import LimitedPostSerializer, PostListSerializer, PostSerializer
 
 logger = logging.getLogger(__name__)
@@ -73,6 +75,10 @@ class PostList(generics.ListCreateAPIView):
         """Return appropriate serializer class based on request method."""
         return PostListSerializer if self.request.method == "GET" else PostSerializer
 
+    def get_serializer_context(self):
+        """Ensure the request is passed to the serializer context."""
+        return {"request": self.request}
+
     def get_queryset(self):
         """Return posts based on user permissions and search filters."""
         queryset = Post.objects.all().select_related("author").prefetch_related("tags", "ratings")
@@ -104,17 +110,22 @@ class PostList(generics.ListCreateAPIView):
         return response
 
     def create(self, request, *args, **kwargs):
-        """Handle post creation and return appropriate response."""
-        serializer = self.get_serializer(data=request.data, context={"request": request})
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        message = STANDARD_MESSAGES.get("POST_CREATED_SUCCESS", {})
-        return Response({
-            "data": serializer.data,
-            "message": message.get("message", "Post created successfully."),
-            "type": message.get("type", "success"),
-        }, status=status.HTTP_201_CREATED, headers=headers)
+        """Create a new post."""
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
+            message = STANDARD_MESSAGES.get("POST_CREATED_SUCCESS", {})
+            return Response({
+                "data": serializer.data,
+                "message": message.get("message", "Post created successfully."),
+                "type": message.get("type", "success"),
+            }, status=status.HTTP_201_CREATED, headers=headers)
+        except ValidationError as exc:
+            return Response({'errors': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({'errors': {'detail': str(exc)}}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def perform_create(self, serializer):
         """Save the post with the current user as author."""
@@ -128,22 +139,19 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
+    def get_serializer_context(self):
+        """Ensure the request is passed to the serializer context."""
+        return {"request": self.request}
+
     def retrieve(self, request, *args, **kwargs):
-        """Retrieve post details with appropriate permissions."""
+        """Retrieve a post along with its comments."""
         instance = self.get_object()
-        user = request.user
-        if not instance.is_approved and not (user == instance.author or user.is_staff or user.is_superuser):
-            return Response(
-                {
-                    "message": "You do not have permission to view this post.",
-                    "type": "error",
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        serializer = self.get_serializer(instance, context={"request": request})
+        serializer = self.get_serializer(instance)
+        data = serializer.data
+        data['comments'] = CommentSerializer(instance.comments.all(), many=True).data
         message = STANDARD_MESSAGES.get("POST_RETRIEVED_SUCCESS", {})
         return Response({
-            "data": serializer.data,
+            "data": data,
             "message": message.get("message", "Post retrieved successfully."),
             "type": message.get("type", "success"),
         })
@@ -159,7 +167,7 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        serializer = self.get_serializer(instance, data=request.data, partial=partial, context={"request": request})
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
 

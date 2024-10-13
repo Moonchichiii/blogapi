@@ -1,19 +1,20 @@
-"""
-Serializers for the Post model.
-"""
+import logging
 
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
+
 from accounts.models import CustomUser
 from tags.models import ProfileTag
 from .models import Post
 
+logger = logging.getLogger(__name__)
+
 
 class PostListSerializer(serializers.ModelSerializer):
     """
-    Serializer for listing posts with author and ownership details.
+    Serializer for listing posts with author and ownership information.
     """
-
     author = serializers.CharField(source="author.profile_name", read_only=True)
     is_owner = serializers.SerializerMethodField()
 
@@ -26,14 +27,15 @@ class PostListSerializer(serializers.ModelSerializer):
         Check if the current user is the owner of the post.
         """
         request = self.context.get("request", None)
-        return request.user == obj.author if request and request.user.is_authenticated else False
+        is_owner = request.user == obj.author if request and request.user.is_authenticated else False
+        logger.debug(f"Checking ownership for post {obj.id}: {is_owner}")
+        return is_owner
 
 
 class PostSerializer(serializers.ModelSerializer):
     """
-    Serializer for detailed post data including tagged users and image.
+    Serializer for creating and updating posts with tags and image validation.
     """
-
     author = serializers.CharField(source="author.profile_name", read_only=True)
     is_owner = serializers.SerializerMethodField()
     image = serializers.ImageField(required=False)
@@ -48,15 +50,32 @@ class PostSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "author", "created_at", "average_rating"]
 
+    def get_is_owner(self, obj):
+        """
+        Check if the current user is the owner of the post.
+        """
+        request = self.context.get("request", None)
+        return request.user == obj.author if request and request.user.is_authenticated else False
+
     def get_tagged_users(self, obj):
         """
-        Return a list of profile names of the users tagged in the post.
+        Get the list of tagged users' profile names.
         """
         return [tag.tagged_user.profile_name for tag in obj.tags.all()]
 
+    def validate_title(self, value):
+        """
+        Validate that the post title is unique.
+        """
+        logger.debug(f"Validating title: {value}")
+        if Post.objects.filter(title=value).exists():
+            logger.error(f"Duplicate title detected: {value}")
+            raise ValidationError("A post with this title already exists.")
+        return value
+
     def create(self, validated_data):
         """
-        Create a new post and handle tag creation.
+        Create a new post and handle tags.
         """
         tags_data = validated_data.pop('tags', [])
         post = Post.objects.create(**validated_data)
@@ -65,75 +84,46 @@ class PostSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         """
-        Update an existing post and handle tag updates.
+        Update an existing post and handle tags.
         """
         tags_data = validated_data.pop('tags', [])
         instance = super().update(instance, validated_data)
         self._handle_tags(instance, tags_data)
         return instance
 
-    def validate(self, attrs):
+    def _handle_tags(self, post, tags_data):
         """
-        Validate the title and image fields.
+        Handle the creation and association of tags with the post.
         """
-        if "title" in attrs:
-            existing_posts = Post.objects.filter(title=attrs["title"])
-            if self.instance:
-                existing_posts = existing_posts.exclude(pk=self.instance.pk)
-            if existing_posts.exists():
-                raise serializers.ValidationError({"title": "A post with this title already exists."})
-        return attrs
+        tag_objects = []
+        for tag_name in tags_data:
+            tagged_user = CustomUser.objects.filter(profile_name=tag_name).first()
+            if not tagged_user:
+                raise ValidationError({'tags': f"User '{tag_name}' does not exist."})
+            tag, created = ProfileTag.objects.get_or_create(
+                tagged_user=tagged_user,
+                tagger=post.author,
+                content_type=ContentType.objects.get_for_model(Post),
+                object_id=post.id
+            )
+            tag_objects.append(tag)
+        post.tags.set(tag_objects)
 
     def validate_image(self, value):
         """
-        Ensure the image file is of valid format and size.
+        Validate the uploaded image for format and size.
         """
-        if value and not value.name.lower().endswith(("jpg", "jpeg", "png", "gif", "webp")):
-            raise serializers.ValidationError("Invalid image format.")
-        if value and value.size > 2 * 1024 * 1024:  # 2 MB limit
-            raise serializers.ValidationError("Image must be less than 2MB.")
+        if value and not value.name.lower().endswith(('jpg', 'jpeg', 'png', 'gif', 'webp')):
+            raise serializers.ValidationError('Upload a valid image.')
+        if value.size > 2 * 1024 * 1024:
+            raise serializers.ValidationError('Image must be less than 2MB.')
         return value
-
-    def _handle_tags(self, post, tags_data):
-        """
-        Process the tag data for the post.
-        """
-        content_type = ContentType.objects.get_for_model(Post)
-        # Remove old tags not in the new tags_data
-        ProfileTag.objects.filter(content_type=content_type, object_id=post.id).exclude(
-            tagged_user__profile_name__in=tags_data
-        ).delete()
-
-        existing_tags = set(
-            ProfileTag.objects.filter(content_type=content_type, object_id=post.id).values_list(
-                "tagged_user__profile_name", flat=True
-            )
-        )
-
-        # Add new tags
-        new_tags = []
-        for tag_name in tags_data:
-            if tag_name not in existing_tags:
-                tagged_user = CustomUser.objects.filter(profile_name=tag_name).first()
-                if tagged_user:
-                    new_tag = ProfileTag(
-                        tagged_user=tagged_user,
-                        tagger=post.author,
-                        content_type=content_type,
-                        object_id=post.id
-                    )
-                    new_tags.append(new_tag)
-                else:
-                    raise serializers.ValidationError({"tags": f"User '{tag_name}' does not exist."})
-        if new_tags:
-            ProfileTag.objects.bulk_create(new_tags, ignore_conflicts=True)
 
 
 class LimitedPostSerializer(serializers.ModelSerializer):
     """
-    Serializer for listing limited post info including author and image.
+    Serializer for limited post information with image URL.
     """
-
     author = serializers.CharField(source="author.profile_name", read_only=True)
     image_url = serializers.SerializerMethodField()
 
@@ -143,6 +133,8 @@ class LimitedPostSerializer(serializers.ModelSerializer):
 
     def get_image_url(self, obj):
         """
-        Get the URL of the post's image if available.
+        Get the URL of the post's image.
         """
-        return obj.image.url if obj.image and hasattr(obj.image, "url") else None
+        image_url = obj.image.url if obj.image and hasattr(obj.image, "url") else None
+        logger.debug(f"Image URL for post {obj.id}: {image_url}")
+        return image_url

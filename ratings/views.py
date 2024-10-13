@@ -4,48 +4,37 @@ from rest_framework.response import Response
 from posts.models import Post
 from .models import Rating
 from .serializers import RatingSerializer
-from celery import shared_task
-from django.utils.translation import gettext as _
+from posts.tasks import update_post_stats
+from .messages import STANDARD_MESSAGES
 
 class CreateOrUpdateRatingView(generics.CreateAPIView):
-    """
-    View to create or update a rating for a post.
-    """
     serializer_class = RatingSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     @transaction.atomic
-    def perform_create(self, request, serializer):
-        post = serializer.validated_data.get('post')
-        rating_value = serializer.validated_data.get('value')
-
-        # Ensure only approved posts can be rated
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        post = serializer.validated_data['post']
         if not post.is_approved:
             return Response(
-                {
-                    'message': _('You cannot rate an unapproved post.'),
-                    'type': 'error',
-                },
-                status=status.HTTP_400_BAD_REQUEST,
+                STANDARD_MESSAGES['POST_NOT_APPROVED'],
+                status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Check if the user has already rated the post
         rating, created = Rating.objects.update_or_create(
             user=request.user,
             post=post,
-            defaults={'value': rating_value},
+            defaults={'value': serializer.validated_data['value']}
         )
 
-        # Asynchronous task to update post stats
+        # Call the update_post_stats task
         update_post_stats.delay(post.id)
 
-        # Return appropriate response
-        message = _('Rating created successfully.') if created else _('Rating updated successfully.')
-        return Response(
-            {
-                'data': self.get_serializer(rating).data,
-                'message': message,
-                'type': 'success',
-            },
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-        )
+        message = STANDARD_MESSAGES['RATING_CREATED_SUCCESS'] if created else STANDARD_MESSAGES['RATING_UPDATED_SUCCESS']
+        return Response({
+            'data': self.get_serializer(rating).data,
+            'message': message['message'],
+            'type': message['type']
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)

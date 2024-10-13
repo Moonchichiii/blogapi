@@ -3,6 +3,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 from cloudinary.models import CloudinaryField
 from django.db.models import Avg, Count
+from tags.models import ProfileTag
 
 
 class Post(models.Model):
@@ -36,13 +37,11 @@ class Post(models.Model):
     is_approved = models.BooleanField(default=False, db_index=True)
     average_rating = models.FloatField(default=0)
     total_ratings = models.PositiveIntegerField(default=0)
+    
+    # Add this many-to-many field for tags
+    tags = models.ManyToManyField(ProfileTag, related_name="posts", blank=True)
 
     def update_rating_statistics(self):
-        """
-        Update the average rating and total number of ratings for the post.
-        This method aggregates the average and total number of ratings for
-        the post and updates the corresponding fields.
-        """
         rating_stats = self.ratings.aggregate(
             avg_rating=Avg('value'),
             total_ratings=Count('id')
@@ -50,7 +49,6 @@ class Post(models.Model):
         self.average_rating = rating_stats['avg_rating'] or 0
         self.total_ratings = rating_stats['total_ratings']
         self.save(update_fields=['average_rating', 'total_ratings'])
-        self.author.profile.update_popularity_score()
 
     def __str__(self):
         """

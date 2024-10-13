@@ -1,7 +1,7 @@
-from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from posts.models import Post
 from .models import Rating
+from .messages import STANDARD_MESSAGES
 
 class RatingSerializer(serializers.ModelSerializer):
     profile_name = serializers.CharField(source='user.profile_name', read_only=True)
@@ -10,10 +10,9 @@ class RatingSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Rating
-        fields = ['post', 'value']
+        fields = ['id', 'profile_name', 'post', 'value', 'post_title']
 
     def validate_value(self, value):
-        """Ensure rating value is between 1 and 5."""
         if not (1 <= value <= 5):
-            raise serializers.ValidationError(_("Rating value must be between 1 and 5."))
+            raise serializers.ValidationError(STANDARD_MESSAGES['INVALID_RATING_VALUE']['message'])
         return value

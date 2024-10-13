@@ -1,19 +1,19 @@
-from unittest.mock import patch
+import unittest.mock as mock
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
-from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
+
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from followers.models import Follow
 from posts.models import Post
 from profiles.models import Profile
-from profiles.serializers import PopularFollowerSerializer, ProfileSerializer
 from profiles.tasks import update_all_popularity_scores
 from ratings.models import Rating
+from tags.models import ProfileTag
 
 User = get_user_model()
 
@@ -36,6 +36,10 @@ class ProfileTests(TestCase):
             author=self.user2, title="Test Post 2", content="Test content 2"
         )
 
+    def tearDown(self):
+        """Clear cache after each test."""
+        cache.clear()
+
     def _create_user(self, profile_name, email=None, password="StrongPassword123!"):
         """Helper function to create a user."""
         if email is None:
@@ -53,8 +57,8 @@ class ProfileTests(TestCase):
         profile_view_url = reverse("profile_detail", kwargs={"user_id": self.user.id})
         response = self.client.get(profile_view_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("bio", response.data)
-        self.assertEqual(response.data.get("bio", ""), self.user.profile.bio)
+        self.assertIn("bio", response.data["data"])
+        self.assertEqual(response.data["data"].get("bio", ""), self.user.profile.bio)
 
     def test_authenticated_user_can_update_profile(self):
         """Test that authenticated users can update their profiles."""
@@ -130,12 +134,46 @@ class ProfileTests(TestCase):
         profile_view_url = reverse("profile_detail", kwargs={"user_id": self.user1.id})
         response = self.client.get(profile_view_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertNotIn("email", response.data)
-        self.assertIn("bio", response.data)
-        self.assertIn("tags", response.data)
+        self.assertNotIn("email", response.data["data"])
+        self.assertIn("bio", response.data["data"])
+        self.assertIn("posts", response.data["data"])
 
-    @patch("profiles.tasks.update_all_popularity_scores.delay")
+    @mock.patch("profiles.tasks.update_all_popularity_scores.delay")
     def test_update_all_popularity_scores_task(self, mock_task):
         """Test that popularity scores update task runs successfully."""
         update_all_popularity_scores.delay()
         mock_task.assert_called_once()
+
+    def test_profile_tagging_edge_case(self):
+        """Test edge case for tagging a user in the profile."""
+        self.client.force_authenticate(user=self.user)
+        update_url = reverse("profile_detail", kwargs={"user_id": self.user.id})
+        data = {"bio": "Updated bio", "tags": ["non_existing_user"]}
+        response = self.client.patch(update_url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("User 'non_existing_user' does not exist.", response.data["tags"])
+
+    def test_profile_tag_removal(self):
+        """Test that tags are correctly removed when updating a profile."""
+        self.client.force_authenticate(user=self.user)
+        update_url = reverse("profile_detail", kwargs={"user_id": self.user.id})
+
+        # Ensure that the user has at least one post to avoid the 'NoneType' issue
+        Post.objects.create(author=self.user, title="Test Post", content="Test content")
+
+        # Initially add some tags, ensuring no duplicates
+        data = {"tags": ["user1_1", "user2_2"]}
+        response = self.client.patch(update_url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('tags', response.data)
+        self.assertEqual(len(response.data["tags"]), 2)
+
+        # Now clear the tags by sending an empty list
+        data = {"tags": []}
+        response = self.client.patch(update_url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('tags', response.data)
+        self.assertEqual(len(response.data["tags"]), 0)
+
+        # Verify that tags were actually removed from the database
+        self.assertEqual(ProfileTag.objects.filter(tagged_user=self.user).count(), 0)

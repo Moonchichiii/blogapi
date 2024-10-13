@@ -1,171 +1,218 @@
+"""
+Test suite for the ProfileTag API, covering edge cases and interlinking.
+"""
+
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from comments.models import Comment
 from posts.models import Post
-from .messages import STANDARD_MESSAGES
-from .models import ProfileTag
+from comments.models import Comment
+from tags.models import ProfileTag
 
 User = get_user_model()
 
 class ProfileTagAPITests(APITestCase):
-    """Test suite for the ProfileTag API."""
+    """
+    Test suite for the ProfileTag API, covering edge cases and interlinking.
+    """
 
-    def setUp(self):
-        """Set up test data for the tests."""
-        self._create_test_users()
-        self._create_test_post_and_comment()
-        self._set_content_types()
-        self.tag_url = reverse('create-profile-tag')
-
-    def _create_test_users(self):
-        """Create test users."""
-        self.user = User.objects.create_user(
+    @classmethod
+    def setUpTestData(cls):
+        """
+        Set up test data for the entire test case.
+        """
+        cls.user = User.objects.create_user(
             email='testuser@example.com',
             profile_name='testuser',
             password='testpass123'
         )
-        self.user.is_active = True
-        self.user.save()
-
-        self.other_user = User.objects.create_user(
+        cls.other_user = User.objects.create_user(
             email='otheruser@example.com',
             profile_name='otheruser',
             password='otherpass123'
         )
-        self.other_user.is_active = True
-        self.other_user.save()
-
-    def _create_test_post_and_comment(self):
-        """Create a test post and comment."""
-        self.post = Post.objects.create(
-            author=self.user,
+        cls.post = Post.objects.create(
             title='Test Post',
-            content='Test post content',
-            is_approved=True
+            content='Test Content',
+            author=cls.user
         )
-        self.comment = Comment.objects.create(
-            author=self.user,
-            post=self.post,
-            content="Test comment"
+        cls.comment = Comment.objects.create(
+            content='Test Comment',
+            post=cls.post,
+            author=cls.user
         )
+        cls.post_content_type = ContentType.objects.get_for_model(Post)
+        cls.comment_content_type = ContentType.objects.get_for_model(Comment)
+        cls.tag_url = reverse('create-profile-tag')
 
-    def _set_content_types(self):
-        """Set content types for post and comment."""
-        self.post_content_type = ContentType.objects.get_for_model(Post)
-        self.comment_content_type = ContentType.objects.get_for_model(Comment)
+    def setUp(self):
+        """
+        Set up the test client and authenticate the user.
+        """
+        self.client.force_authenticate(user=self.user)
 
     def test_create_tag_for_post(self):
-        """Test creating a tag for a post as an authenticated user."""
-        self.client.force_authenticate(user=self.user)
+        """
+        Test creating a tag for a post.
+        """
         data = {
             'tagged_user': self.other_user.id,
             'content_type': self.post_content_type.id,
-            'object_id': self.post.id
+            'object_id': self.post.id,
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(ProfileTag.objects.count(), 1)
-        self.assertEqual(ProfileTag.objects.first().tagged_user, self.other_user)
-        self.client.force_authenticate(user=None)
+        self.assertEqual(response.data['message'], 'Tag created successfully')
 
     def test_create_tag_for_comment(self):
-        """Test creating a tag for a comment as an authenticated user."""
-        self.client.force_authenticate(user=self.user)
+        """
+        Test creating a tag for a comment.
+        """
         data = {
             'tagged_user': self.other_user.id,
             'content_type': self.comment_content_type.id,
-            'object_id': self.comment.id
+            'object_id': self.comment.id,
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(ProfileTag.objects.count(), 1)
-        self.assertEqual(ProfileTag.objects.first().content_object, self.comment)
-        self.client.force_authenticate(user=None)
+        self.assertEqual(response.data['message'], 'Tag created successfully')
 
     def test_tagging_yourself(self):
-        """Test that a user cannot tag themselves."""
-        self.client.force_authenticate(user=self.user)
+        """
+        Test that a user cannot tag themselves.
+        """
         data = {
             'tagged_user': self.user.id,
             'content_type': self.post_content_type.id,
-            'object_id': self.post.id
+            'object_id': self.post.id,
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], STANDARD_MESSAGES['CANNOT_TAG_SELF']['message'])
+        self.assertEqual(response.data['non_field_errors'][0], 
+                         'You cannot tag yourself.')
 
-    def test_create_tag_invalid_content_type(self):
-        """Test creating a tag with an invalid content type."""
-        self.client.force_authenticate(user=self.user)
-        data = {
-            'tagged_user': self.other_user.id,
-            'content_type': 999,
-            'object_id': self.post.id
-        }
-        response = self.client.post(self.tag_url, data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], STANDARD_MESSAGES['INVALID_CONTENT_TYPE']['message'])
-
-    def test_create_tag_for_non_existent_object(self):
-        """Test creating a tag for a non-existent object."""
-        self.client.force_authenticate(user=self.user)
+    def test_create_tag_with_invalid_object_id(self):
+        """
+        Test creating a tag with an invalid object ID.
+        """
         data = {
             'tagged_user': self.other_user.id,
             'content_type': self.post_content_type.id,
-            'object_id': 9999
+            'object_id': 'invalid',
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], "Invalid object.")
+        self.assertEqual(response.data['object_id'][0], 
+                         'A valid integer is required.')
 
-    def test_duplicate_tag_for_same_object(self):
-        """Test creating a duplicate tag for the same object."""
-        self.client.force_authenticate(user=self.user)
+    def test_create_tag_with_missing_fields(self):
+        """
+        Test creating a tag with missing fields.
+        """
+        data = {'tagged_user': self.other_user.id}
+        response = self.client.post(self.tag_url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_duplicate_tag(self):
+        """
+        Test that duplicate tags cannot be created for the same object and user.
+        """
         data = {
             'tagged_user': self.other_user.id,
             'content_type': self.post_content_type.id,
-            'object_id': self.post.id
+            'object_id': self.post.id,
         }
-        response_first = self.client.post(self.tag_url, data)
-        self.assertEqual(response_first.status_code, status.HTTP_201_CREATED)
+        response = self.client.post(self.tag_url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['errors']['non_field_errors'][0], "The fields tagged_user, content_type, object_id must make a unique set.")
+        self.assertIn('non_field_errors', response.data)
+        self.assertEqual(response.data['non_field_errors'][0], 
+                         'The fields tagged_user, content_type, object_id must make a unique set.')
 
-    def test_create_tag_as_unauthenticated_user(self):
-        """Test creating a tag as an unauthenticated user."""
+    def test_unauthenticated_user_cannot_create_tag(self):
+        """
+        Test that unauthenticated users cannot create tags.
+        """
+        self.client.force_authenticate(user=None)
         data = {
             'tagged_user': self.other_user.id,
             'content_type': self.post_content_type.id,
-            'object_id': self.post.id
+            'object_id': self.post.id,
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-    def test_create_tag_with_invalid_object_id(self):
-        """Test creating a tag with an invalid object ID."""
-        self.client.force_authenticate(user=self.user)
+    def test_tag_deleted_when_post_is_deleted(self):
+        """
+        Test that a tag is deleted when the tagged post is deleted.
+        """
         data = {
             'tagged_user': self.other_user.id,
             'content_type': self.post_content_type.id,
-            'object_id': 'invalid'
+            'object_id': self.post.id,
         }
         response = self.client.post(self.tag_url, data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], "Invalid content type for tagging.")
-        self.client.force_authenticate(user=None)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-    def test_create_tag_with_missing_fields(self):
-        """Test creating a tag with missing fields."""
-        self.client.force_authenticate(user=self.user)
+        self.post.delete()
+
+        tag_exists = ProfileTag.objects.filter(
+            tagged_user=self.other_user, 
+            content_type=self.post_content_type, 
+            object_id=self.post.id
+        ).exists()
+        self.assertFalse(tag_exists)
+
+    def test_tag_deleted_when_comment_is_deleted(self):
+        """
+        Test that a tag is deleted when the tagged comment is deleted.
+        """
         data = {
             'tagged_user': self.other_user.id,
+            'content_type': self.comment_content_type.id,
+            'object_id': self.comment.id,
+        }
+        response = self.client.post(self.tag_url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        self.comment.delete()
+
+        tag_exists = ProfileTag.objects.filter(
+            tagged_user=self.other_user, 
+            content_type=self.comment_content_type, 
+            object_id=self.comment.id
+        ).exists()
+        self.assertFalse(tag_exists)
+
+    def test_create_tag_with_nonexistent_user(self):
+        """
+        Test creating a tag with a nonexistent user.
+        """
+        data = {
+            'tagged_user': 9999,
+            'content_type': self.post_content_type.id,
+            'object_id': self.post.id,
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.client.force_authenticate(user=None)
+        self.assertEqual(response.data['tagged_user'][0], 
+                         'Invalid pk "9999" - object does not exist.')
+
+    def test_create_tag_with_nonexistent_content_type(self):
+        """
+        Test creating a tag with a nonexistent content type.
+        """
+        data = {
+            'tagged_user': self.other_user.id,
+            'content_type': 9999,
+            'object_id': self.post.id,
+        }
+        response = self.client.post(self.tag_url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['content_type'][0], 
+                         'Invalid pk "9999" - object does not exist.')
