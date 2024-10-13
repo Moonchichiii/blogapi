@@ -1,17 +1,15 @@
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
+from django.utils.translation import gettext_lazy as _
+from cloudinary.models import CloudinaryField
 from django.db.models import Avg, Count
 
-from cloudinary.models import CloudinaryField
-from tags.models import ProfileTag
-
-
-from django.conf import settings
-from django.db import models
-from cloudinary.models import CloudinaryField
 
 class Post(models.Model):
+    """
+    Model representing a post made by a user.
+    """
+
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -41,13 +39,28 @@ class Post(models.Model):
 
     def update_rating_statistics(self):
         """
-        Update the average rating and total ratings for the post.
+        Update the average rating and total number of ratings for the post.
+        This method aggregates the average and total number of ratings for
+        the post and updates the corresponding fields.
         """
         rating_stats = self.ratings.aggregate(
-            avg_rating=models.Avg('value'),
-            total_ratings=models.Count('id')
+            avg_rating=Avg('value'),
+            total_ratings=Count('id')
         )
         self.average_rating = rating_stats['avg_rating'] or 0
         self.total_ratings = rating_stats['total_ratings']
         self.save(update_fields=['average_rating', 'total_ratings'])
         self.author.profile.update_popularity_score()
+
+    def __str__(self):
+        """
+        Return a string representation of the post.
+        """
+        return f"Post by {self.author.profile_name}: {self.title}"
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['author', 'created_at']),
+            models.Index(fields=['is_approved']),
+        ]

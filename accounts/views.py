@@ -1,6 +1,10 @@
+import logging
+
 from django.conf import settings
 from django.contrib.auth import get_user_model, authenticate, login
 from django.core.mail import send_mail
+from django.core.signing import TimestampSigner, BadSignature
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
@@ -12,7 +16,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
-from django.core.signing import TimestampSigner, BadSignature
 
 from .serializers import UserRegistrationSerializer, LoginSerializer, UserSerializer
 from .tokens import account_activation_token
@@ -20,32 +23,42 @@ from .messages import STANDARD_MESSAGES
 
 User = get_user_model()
 
+logger = logging.getLogger(__name__)
+
 class RegisterView(generics.CreateAPIView):
-    """User registration"""
+    """User registration view."""
     serializer_class = UserRegistrationSerializer
     permission_classes = [AllowAny]
+
     def perform_create(self, serializer):
         user = serializer.save(is_active=False)
         self.send_activation_email(user)
-    
+
     def send_activation_email(self, user):
+        """Send account activation email."""
         token = account_activation_token.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         activation_link = f"{settings.FRONTEND_URL}/activate/{uid}/{token}/"
         subject = 'Activate your account'
-        message = f'Hi {user.profile_name},\n\nPlease click the link below to activate your account:\n{activation_link}\n\nThank you!'
+        message = (
+            f'Hi {user.profile_name},\n\n'
+            f'Please click the link below to activate your account:\n'
+            f'{activation_link}\n\nThank you!'
+        )
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
 
+
 class ActivateAccountView(APIView):
+    """Account activation view."""
     permission_classes = [AllowAny]
-   
+
     def get(self, request, uidb64, token):
         try:
             uid = force_str(urlsafe_base64_decode(uidb64))
             user = User.objects.get(pk=uid)
         except (TypeError, ValueError, OverflowError, User.DoesNotExist):
             user = None
-       
+
         if user and account_activation_token.check_token(user, token):
             user.is_active = True
             user.save()
@@ -69,9 +82,11 @@ class ActivateAccountView(APIView):
             "type": "error"
         }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class ResendVerificationEmailView(APIView):
-    """Resend verification email"""
+    """Resend verification email view."""
     permission_classes = [AllowAny]
+
     def post(self, request):
         email = request.data.get('email')
         if not email:
@@ -79,25 +94,31 @@ class ResendVerificationEmailView(APIView):
                 "message": "Email is required.",
                 "type": "error"
             }, status=status.HTTP_400_BAD_REQUEST)
+
         user = User.objects.filter(email=email).first()
         if not user:
             return Response({
                 "message": "User not found.",
                 "type": "error"
             }, status=status.HTTP_404_NOT_FOUND)
+
         if user.is_active:
             return Response({
                 "message": "User already verified.",
                 "type": "error"
             }, status=status.HTTP_400_BAD_REQUEST)
+
         RegisterView().send_activation_email(user)
         return Response({
             "message": "Verification email resent successfully.",
             "type": "success"
         }, status=status.HTTP_200_OK)
 
+
 class SetupTwoFactorView(APIView):
+    """Setup two-factor authentication view."""
     permission_classes = [IsAuthenticated]
+
     def post(self, request):
         user = request.user
         device = TOTPDevice.objects.filter(user=user, name="default").first()
@@ -106,6 +127,7 @@ class SetupTwoFactorView(APIView):
                 "message": "Two-factor authentication is already set up.",
                 "type": "error"
             }, status=status.HTTP_400_BAD_REQUEST)
+
         device = TOTPDevice.objects.create(user=user, name="default")
         return Response({
             "message": "Two-factor authentication setup successful.",
@@ -114,7 +136,10 @@ class SetupTwoFactorView(APIView):
             "secret_key": device.key
         }, status=status.HTTP_200_OK)
 
+
 class LoginView(APIView):
+    """User login view."""
+
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
@@ -127,30 +152,31 @@ class LoginView(APIView):
                 "access": str(refresh.access_token),
                 "refresh": str(refresh)
             }, status=status.HTTP_200_OK)
-        else:
-            errors = serializer.errors
-            if 'non_field_errors' in errors:
-                error_message = errors['non_field_errors'][0]
-                if error_message == "Account is not activated.":
-                    return Response({
-                        "message": error_message,
-                        "type": "error"
-                    }, status=status.HTTP_403_FORBIDDEN)
-                else:
-                    return Response({
-                        "message": "Invalid credentials.",
-                        "type": "error"
-                    }, status=status.HTTP_401_UNAUTHORIZED)
-            else:
+
+        errors = serializer.errors
+        if 'non_field_errors' in errors:
+            error_message = errors['non_field_errors'][0]
+            if error_message == "Account is not activated.":
                 return Response({
-                    "message": "Invalid input.",
-                    "type": "error",
-                    "errors": errors
-                }, status=status.HTTP_400_BAD_REQUEST)
+                    "message": error_message,
+                    "type": "error"
+                }, status=status.HTTP_403_FORBIDDEN)
+            return Response({
+                "message": "Invalid credentials.",
+                "type": "error"
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
+        return Response({
+            "message": "Invalid input.",
+            "type": "error",
+            "errors": errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
 
 class CustomTokenRefreshView(TokenRefreshView):
-    """Token refresh and set cookie"""
+    """Token refresh and set cookie view."""
     permission_classes = [AllowAny]
+
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
         if response.status_code == 200:
@@ -159,12 +185,15 @@ class CustomTokenRefreshView(TokenRefreshView):
             response.set_cookie('refresh_token', tokens['refresh'], httponly=True, secure=request.is_secure())
         return response
 
+
 class UpdateEmailView(generics.UpdateAPIView):
-    """Update email"""
+    """Update email view."""
     permission_classes = [IsAuthenticated]
     serializer_class = UserSerializer
+
     def get_object(self):
         return self.request.user
+
     def update(self, request, *args, **kwargs):
         serializer = self.get_serializer(self.get_object(), data=request.data, partial=True)
         if serializer.is_valid():
@@ -174,15 +203,18 @@ class UpdateEmailView(generics.UpdateAPIView):
                 "type": "success",
                 "data": serializer.data
             }, status=status.HTTP_200_OK)
+
         return Response({
             "message": "Failed to update email.",
             "type": "error",
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class LogoutView(APIView):
-    """User logout"""
+    """User logout view."""
     permission_classes = [IsAuthenticated]
+
     def post(self, request):
         try:
             refresh_token = request.COOKIES.get('refresh_token')
@@ -196,15 +228,18 @@ class LogoutView(APIView):
             response.delete_cookie('refresh_token')
             return response
         except Exception as e:
+            logger.error(f"Logout failed: {e}")
             return Response({
                 "message": "Invalid refresh token.",
                 "type": "error",
                 "error": str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class AccountDeletionView(APIView):
-    """Delete account"""
+    """Delete account view."""
     permission_classes = [IsAuthenticated]
+
     def post(self, request):
         user = request.user
         user.delete()
@@ -213,9 +248,11 @@ class AccountDeletionView(APIView):
             "type": "success"
         }, status=status.HTTP_200_OK)
 
+
 class CurrentUserView(generics.RetrieveAPIView):
-    """Retrieve current user details"""
+    """Retrieve current user details view."""
     permission_classes = [IsAuthenticated]
     serializer_class = UserSerializer
+
     def get_object(self):
         return self.request.user

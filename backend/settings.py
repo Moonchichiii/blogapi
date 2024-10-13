@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     'django_otp', 'django_otp.plugins.otp_static', 'django_otp.plugins.otp_totp',
     'two_factor', 'rest_framework', 'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist', 'corsheaders', 'django_filters',
-    'accounts', 'profiles', 'posts', 'comments', 'ratings', 'tags', 'followers'
+    'accounts', 'profiles', 'posts', 'comments', 'ratings', 'tags', 'followers','notifications'
 ]
 
 LOGIN_URL = 'two_factor:login'

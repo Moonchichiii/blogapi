@@ -4,6 +4,9 @@ from comments.models import Comment
 from posts.models import Post
 from .models import ProfileTag
 
+from django.core.exceptions import ValidationError
+from django.utils.translation import gettext_lazy as _
+
 class ProfileTagSerializer(serializers.ModelSerializer):
     """Serializer for ProfileTag model."""
     tagger_name = serializers.CharField(source='tagger.profile_name', read_only=True)
@@ -22,20 +25,20 @@ class ProfileTagSerializer(serializers.ModelSerializer):
         object_id = attrs.get('object_id')
 
         if tagged_user == request.user:
-            raise serializers.ValidationError({'message': "You cannot tag yourself."})
+            raise ValidationError({'message': _("You cannot tag yourself.")})
 
         valid_models = [Post, Comment]
         model_class = content_type.model_class()
         if model_class not in valid_models:
-            raise serializers.ValidationError({'message': "Invalid content type for tagging."})
+            raise ValidationError({'message': _("Invalid content type for tagging.")})
 
         try:
             model_class.objects.get(pk=object_id)
         except model_class.DoesNotExist:
-            raise serializers.ValidationError({'message': "Invalid object."})
+            raise ValidationError({'message': _("Invalid object.")})
 
         if ProfileTag.objects.filter(tagged_user=tagged_user, content_type=content_type, object_id=object_id).exists():
-            raise serializers.ValidationError({'message': "Duplicate tag: You have already tagged this user on this object."})
+            raise ValidationError({'message': _("Duplicate tag: You have already tagged this user on this object.")})
 
         return attrs
 
@@ -43,3 +46,4 @@ class ProfileTagSerializer(serializers.ModelSerializer):
         """Assign request user as tagger and create ProfileTag instance."""
         validated_data['tagger'] = self.context['request'].user
         return super().create(validated_data)
+

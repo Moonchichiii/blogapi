@@ -16,11 +16,11 @@ class CreateProfileTag(generics.CreateAPIView):
             self.perform_create(serializer)
             return Response({
                 'data': serializer.data,
-                'message': 'Tag created successfully.',
-                'type': 'success'
+                'message': STANDARD_MESSAGES['TAG_CREATED_SUCCESS']['message'],
+                'type': STANDARD_MESSAGES['TAG_CREATED_SUCCESS']['type']
             }, status=status.HTTP_201_CREATED)
         except IntegrityError:
-            raise ValidationError("Duplicate tag: You have already tagged this user on this object.")
+            raise ValidationError(STANDARD_MESSAGES['DUPLICATE_TAG']['message'])
         except ValidationError as e:
             return Response({
                 'message': e.detail.get('message', 'Validation failed.'),

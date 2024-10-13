@@ -1,3 +1,4 @@
+from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from posts.models import Post
 from .models import Rating
@@ -14,5 +15,5 @@ class RatingSerializer(serializers.ModelSerializer):
     def validate_value(self, value):
         """Ensure rating value is between 1 and 5."""
         if not (1 <= value <= 5):
-            raise serializers.ValidationError("Rating value must be between 1 and 5.")
+            raise serializers.ValidationError(_("Rating value must be between 1 and 5."))
         return value

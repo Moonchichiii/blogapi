@@ -14,6 +14,7 @@ urlpatterns = [
     path('api/', include('ratings.urls')),
     path('api/', include('tags.urls')),
     path('api/followers/', include('followers.urls')),
+    path('api/', include('notifications.urls')),
 ]
 
 if settings.DEBUG:
