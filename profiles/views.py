@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 
 from .models import Profile
-from .serializers import ProfileSerializer, PopularFollowerSerializer
+from .serializers import ProfileSerializer
 from .messages import profile_success_response
 from backend.permissions import IsOwnerOrReadOnly
 
@@ -32,11 +32,9 @@ class ProfileList(generics.ListAPIView):
 
     def get_queryset(self):
         """
-        Get the queryset for profiles ordered by popularity and follower count.
+        Get the queryset for profiles ordered by popularity score.
         """
-        return Profile.objects.prefetch_related('user__followers').order_by(
-            '-popularity_score', '-follower_count'
-        )
+        return Profile.objects.order_by('-popularity_score')
 
     @method_decorator(cache_page(CACHE_TIMEOUT))
     def list(self, request, *args, **kwargs):
@@ -127,25 +125,3 @@ class CurrentUserProfileView(generics.RetrieveUpdateAPIView):
         )
 
 
-class PopularFollowersView(generics.ListAPIView):
-    """API view to list popular followers of a user."""
-    serializer_class = PopularFollowerSerializer
-    permission_classes = [AllowAny]
-
-    @method_decorator(cache_page(CACHE_TIMEOUT))
-    def list(self, request, *args, **kwargs):
-        """List popular followers with caching."""
-        queryset = self.get_queryset()
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-
-    def get_queryset(self):
-        """Get the queryset for popular followers of a user."""
-        user_id = self.kwargs['user_id']
-        return Profile.objects.filter(
-            user__followers__follower_id=user_id
-        ).select_related('user').order_by('-popularity_score')[:10]
