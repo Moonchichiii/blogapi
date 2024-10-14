@@ -6,25 +6,27 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0001_initial'),
-        ('auth', '0012_alter_user_first_name_max_length'),
+        ("accounts", "0001_initial"),
+        ("auth", "0012_alter_user_first_name_max_length"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='customuser',
+            name="customuser",
             options={},
         ),
         migrations.RemoveField(
-            model_name='customuser',
-            name='username',
+            model_name="customuser",
+            name="username",
         ),
         migrations.AddConstraint(
-            model_name='customuser',
-            constraint=models.UniqueConstraint(fields=('email',), name='unique_email'),
+            model_name="customuser",
+            constraint=models.UniqueConstraint(fields=("email",), name="unique_email"),
         ),
         migrations.AddConstraint(
-            model_name='customuser',
-            constraint=models.UniqueConstraint(fields=('profile_name',), name='unique_profile_name'),
+            model_name="customuser",
+            constraint=models.UniqueConstraint(
+                fields=("profile_name",), name="unique_profile_name"
+            ),
         ),
     ]

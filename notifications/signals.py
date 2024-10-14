@@ -6,6 +6,7 @@ from ratings.models import Rating
 from .models import Notification
 from .tasks import send_notification_task
 
+
 @receiver(post_save, sender=Follow)
 def create_follow_notification(sender, instance, created, **kwargs):
     """
@@ -14,6 +15,7 @@ def create_follow_notification(sender, instance, created, **kwargs):
     if created:
         message = f"{instance.follower.profile_name} followed you."
         send_notification_task.delay(instance.followed.id, "Follow", message)
+
 
 @receiver(post_save, sender=Comment)
 def create_comment_notification(sender, instance, created, **kwargs):
@@ -24,11 +26,14 @@ def create_comment_notification(sender, instance, created, **kwargs):
         message = f"{instance.author.profile_name} commented on your post '{instance.post.title}'."
         send_notification_task.delay(instance.post.author.id, "Comment", message)
 
+
 @receiver(post_save, sender=Rating)
 def create_rating_notification(sender, instance, created, **kwargs):
     """
     Create a notification when a post is rated by a user.
     """
     if created and instance.post.author != instance.user:
-        message = f"{instance.user.profile_name} rated your post '{instance.post.title}'."
+        message = (
+            f"{instance.user.profile_name} rated your post '{instance.post.title}'."
+        )
         send_notification_task.delay(instance.post.author.id, "Rating", message)

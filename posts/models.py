@@ -14,13 +14,13 @@ class Post(models.Model):
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='posts',
-        db_index=True
+        related_name="posts",
+        db_index=True,
     )
     title = models.CharField(max_length=200, db_index=True)
     content = models.TextField()
     image = CloudinaryField(
-        'image',
+        "image",
         blank=True,
         null=True,
         transformation={
@@ -28,27 +28,26 @@ class Post(models.Model):
             "quality": "auto:eco",
             "crop": "limit",
             "width": 2000,
-            "height": 2000
+            "height": 2000,
         },
-        default='default.webp'
+        default="default.webp",
     )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_approved = models.BooleanField(default=False, db_index=True)
     average_rating = models.FloatField(default=0)
     total_ratings = models.PositiveIntegerField(default=0)
-    
+
     # Add this many-to-many field for tags
     tags = models.ManyToManyField(ProfileTag, related_name="posts", blank=True)
 
     def update_rating_statistics(self):
         rating_stats = self.ratings.aggregate(
-            avg_rating=Avg('value'),
-            total_ratings=Count('id')
+            avg_rating=Avg("value"), total_ratings=Count("id")
         )
-        self.average_rating = rating_stats['avg_rating'] or 0
-        self.total_ratings = rating_stats['total_ratings']
-        self.save(update_fields=['average_rating', 'total_ratings'])
+        self.average_rating = rating_stats["avg_rating"] or 0
+        self.total_ratings = rating_stats["total_ratings"]
+        self.save(update_fields=["average_rating", "total_ratings"])
 
     def __str__(self):
         """
@@ -57,8 +56,8 @@ class Post(models.Model):
         return f"Post by {self.author.profile_name}: {self.title}"
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['author', 'created_at']),
-            models.Index(fields=['is_approved']),
+            models.Index(fields=["author", "created_at"]),
+            models.Index(fields=["is_approved"]),
         ]

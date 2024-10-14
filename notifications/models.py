@@ -1,9 +1,13 @@
 from django.conf import settings
 from django.db import models
 
+
 class Notification(models.Model):
     """Store notifications for users."""
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications"
+    )
     notification_type = models.CharField(max_length=50)
     message = models.TextField()
     is_read = models.BooleanField(default=False)
@@ -13,7 +17,7 @@ class Notification(models.Model):
         return f"Notification for {self.user.username} - {self.notification_type}"
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['user', 'is_read']),
+            models.Index(fields=["user", "is_read"]),
         ]

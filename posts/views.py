@@ -31,6 +31,7 @@ MAX_PAGE_SIZE = 100
 
 class PostCursorPagination(PageNumberPagination):
     """Custom pagination class for paginating posts."""
+
     page_size = DEFAULT_PAGE_SIZE
     page_size_query_param = "page_size"
     max_page_size = MAX_PAGE_SIZE
@@ -38,6 +39,7 @@ class PostCursorPagination(PageNumberPagination):
 
 class PostPreviewList(generics.ListAPIView):
     """List preview of approved posts for public access."""
+
     permission_classes = [permissions.AllowAny]
     pagination_class = PostCursorPagination
     serializer_class = LimitedPostSerializer
@@ -63,6 +65,7 @@ class PostPreviewList(generics.ListAPIView):
 
 class PostList(generics.ListCreateAPIView):
     """API view to list and create posts."""
+
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     pagination_class = PostCursorPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -81,7 +84,11 @@ class PostList(generics.ListCreateAPIView):
 
     def get_queryset(self):
         """Return posts based on user permissions and search filters."""
-        queryset = Post.objects.all().select_related("author").prefetch_related("tags", "ratings")
+        queryset = (
+            Post.objects.all()
+            .select_related("author")
+            .prefetch_related("tags", "ratings")
+        )
         user = self.request.user
 
         if user.is_authenticated and not (user.is_superuser or user.is_staff):
@@ -103,10 +110,12 @@ class PostList(generics.ListCreateAPIView):
         """List cached and paginated posts."""
         response = super().list(request, *args, **kwargs)
         message = STANDARD_MESSAGES.get("POSTS_RETRIEVED_SUCCESS", {})
-        response.data.update({
-            "message": message.get("message", "Posts retrieved successfully."),
-            "type": message.get("type", "success"),
-        })
+        response.data.update(
+            {
+                "message": message.get("message", "Posts retrieved successfully."),
+                "type": message.get("type", "success"),
+            }
+        )
         return response
 
     def create(self, request, *args, **kwargs):
@@ -117,15 +126,22 @@ class PostList(generics.ListCreateAPIView):
             self.perform_create(serializer)
             headers = self.get_success_headers(serializer.data)
             message = STANDARD_MESSAGES.get("POST_CREATED_SUCCESS", {})
-            return Response({
-                "data": serializer.data,
-                "message": message.get("message", "Post created successfully."),
-                "type": message.get("type", "success"),
-            }, status=status.HTTP_201_CREATED, headers=headers)
+            return Response(
+                {
+                    "data": serializer.data,
+                    "message": message.get("message", "Post created successfully."),
+                    "type": message.get("type", "success"),
+                },
+                status=status.HTTP_201_CREATED,
+                headers=headers,
+            )
         except ValidationError as exc:
-            return Response({'errors': exc.detail}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"errors": exc.detail}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
-            return Response({'errors': {'detail': str(exc)}}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"errors": {"detail": str(exc)}},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def perform_create(self, serializer):
         """Save the post with the current user as author."""
@@ -134,6 +150,7 @@ class PostList(generics.ListCreateAPIView):
 
 class PostDetail(generics.RetrieveUpdateDestroyAPIView):
     """API view to retrieve, update, or delete a post."""
+
     queryset = Post.objects.all()
     serializer_class = PostSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
@@ -148,13 +165,15 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
         instance = self.get_object()
         serializer = self.get_serializer(instance)
         data = serializer.data
-        data['comments'] = CommentSerializer(instance.comments.all(), many=True).data
+        data["comments"] = CommentSerializer(instance.comments.all(), many=True).data
         message = STANDARD_MESSAGES.get("POST_RETRIEVED_SUCCESS", {})
-        return Response({
-            "data": data,
-            "message": message.get("message", "Post retrieved successfully."),
-            "type": message.get("type", "success"),
-        })
+        return Response(
+            {
+                "data": data,
+                "message": message.get("message", "Post retrieved successfully."),
+                "type": message.get("type", "success"),
+            }
+        )
 
     def update(self, request, *args, **kwargs):
         """Handle post update requests with correct permissions."""
@@ -163,7 +182,10 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
         user = request.user
         if not (user == instance.author or user.is_staff or user.is_superuser):
             return Response(
-                {"message": "You don't have permission to update this post.", "type": "error"},
+                {
+                    "message": "You don't have permission to update this post.",
+                    "type": "error",
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -183,11 +205,13 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
                 "message": "Your post has been updated successfully.",
                 "type": "success",
             }
-        return Response({
-            "data": serializer.data,
-            "message": message["message"],
-            "type": message["type"],
-        })
+        return Response(
+            {
+                "data": serializer.data,
+                "message": message["message"],
+                "type": message["type"],
+            }
+        )
 
     def destroy(self, request, *args, **kwargs):
         """Handle DELETE requests for posts."""
@@ -195,19 +219,26 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
         user = request.user
         if user == instance.author or user.is_superuser:
             self.perform_destroy(instance)
-            return Response({
-                "message": "Your post has been deleted successfully.",
-                "type": "success",
-            }, status=status.HTTP_204_NO_CONTENT)
+            return Response(
+                {
+                    "message": "Your post has been deleted successfully.",
+                    "type": "success",
+                },
+                status=status.HTTP_204_NO_CONTENT,
+            )
         else:
-            return Response({
-                "message": "You do not have permission to delete this post.",
-                "type": "error",
-            }, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {
+                    "message": "You do not have permission to delete this post.",
+                    "type": "error",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
 
 class ApprovePost(generics.UpdateAPIView):
     """API view to approve a post."""
+
     queryset = Post.objects.all()
     serializer_class = PostSerializer
     permission_classes = [permissions.IsAdminUser]
@@ -218,15 +249,18 @@ class ApprovePost(generics.UpdateAPIView):
         instance.is_approved = True
         instance.save(update_fields=["is_approved"])
         serializer = self.get_serializer(instance)
-        return Response({
-            "data": serializer.data,
-            "message": "The post has been approved successfully.",
-            "type": "success",
-        })
+        return Response(
+            {
+                "data": serializer.data,
+                "message": "The post has been approved successfully.",
+                "type": "success",
+            }
+        )
 
 
 class UnapprovedPostList(generics.ListAPIView):
     """List all unapproved posts for staff and superusers."""
+
     serializer_class = PostListSerializer
     permission_classes = [permissions.IsAdminUser]
 
@@ -242,6 +276,7 @@ class UnapprovedPostList(generics.ListAPIView):
 
 class DisapprovePost(APIView):
     """API view to disapprove a post."""
+
     permission_classes = [permissions.IsAdminUser]
 
     def post(self, request, pk):
@@ -249,17 +284,23 @@ class DisapprovePost(APIView):
         try:
             post = Post.objects.get(pk=pk)
         except Post.DoesNotExist:
-            return Response({
-                "message": "The post you are trying to access does not exist.",
-                "type": "error",
-            }, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {
+                    "message": "The post you are trying to access does not exist.",
+                    "type": "error",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         reason = request.data.get("reason")
         if not reason:
-            return Response({
-                "message": "Disapproval reason is required.",
-                "type": "error",
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {
+                    "message": "Disapproval reason is required.",
+                    "type": "error",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         post.is_approved = False
         post.save(update_fields=["is_approved"])
@@ -274,8 +315,11 @@ class DisapprovePost(APIView):
 
         serializer = PostSerializer(post, context={"request": request})
         message = STANDARD_MESSAGES.get("POST_DISAPPROVED_SUCCESS", {})
-        return Response({
-            "data": serializer.data,
-            "message": message.get("message", "Post disapproved successfully."),
-            "type": message.get("type", "success"),
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "data": serializer.data,
+                "message": message.get("message", "Post disapproved successfully."),
+                "type": message.get("type", "success"),
+            },
+            status=status.HTTP_200_OK,
+        )

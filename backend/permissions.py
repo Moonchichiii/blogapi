@@ -1,5 +1,6 @@
 from rest_framework import permissions
 
+
 class IsOwnerOrReadOnly(permissions.BasePermission):
     """
     Custom permission to allow owners, staff, or superusers to edit an object.
@@ -17,10 +18,10 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
             return True
 
         # Write permissions are allowed if the user is the owner, staff, or superuser.
-        if hasattr(obj, 'author') and obj.author == request.user:
+        if hasattr(obj, "author") and obj.author == request.user:
             return True
 
-        if hasattr(obj, 'user') and obj.user == request.user:
+        if hasattr(obj, "user") and obj.user == request.user:
             return True
 
         if request.user.is_staff or request.user.is_superuser:

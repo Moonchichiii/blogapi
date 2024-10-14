@@ -15,6 +15,7 @@ class PostListSerializer(serializers.ModelSerializer):
     """
     Serializer for listing posts with author and ownership information.
     """
+
     author = serializers.CharField(source="author.profile_name", read_only=True)
     is_owner = serializers.SerializerMethodField()
 
@@ -27,7 +28,11 @@ class PostListSerializer(serializers.ModelSerializer):
         Check if the current user is the owner of the post.
         """
         request = self.context.get("request", None)
-        is_owner = request.user == obj.author if request and request.user.is_authenticated else False
+        is_owner = (
+            request.user == obj.author
+            if request and request.user.is_authenticated
+            else False
+        )
         logger.debug(f"Checking ownership for post {obj.id}: {is_owner}")
         return is_owner
 
@@ -36,6 +41,7 @@ class PostSerializer(serializers.ModelSerializer):
     """
     Serializer for creating and updating posts with tags and image validation.
     """
+
     author = serializers.CharField(source="author.profile_name", read_only=True)
     is_owner = serializers.SerializerMethodField()
     image = serializers.ImageField(required=False)
@@ -45,8 +51,16 @@ class PostSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = [
-            "id", "title", "content", "image", "author", "created_at",
-            "average_rating", "is_owner", "tagged_users", "tags"
+            "id",
+            "title",
+            "content",
+            "image",
+            "author",
+            "created_at",
+            "average_rating",
+            "is_owner",
+            "tagged_users",
+            "tags",
         ]
         read_only_fields = ["id", "author", "created_at", "average_rating"]
 
@@ -55,7 +69,11 @@ class PostSerializer(serializers.ModelSerializer):
         Check if the current user is the owner of the post.
         """
         request = self.context.get("request", None)
-        return request.user == obj.author if request and request.user.is_authenticated else False
+        return (
+            request.user == obj.author
+            if request and request.user.is_authenticated
+            else False
+        )
 
     def get_tagged_users(self, obj):
         """
@@ -77,7 +95,7 @@ class PostSerializer(serializers.ModelSerializer):
         """
         Create a new post and handle tags.
         """
-        tags_data = validated_data.pop('tags', [])
+        tags_data = validated_data.pop("tags", [])
         post = Post.objects.create(**validated_data)
         self._handle_tags(post, tags_data)
         return post
@@ -86,7 +104,7 @@ class PostSerializer(serializers.ModelSerializer):
         """
         Update an existing post and handle tags.
         """
-        tags_data = validated_data.pop('tags', [])
+        tags_data = validated_data.pop("tags", [])
         instance = super().update(instance, validated_data)
         self._handle_tags(instance, tags_data)
         return instance
@@ -99,12 +117,12 @@ class PostSerializer(serializers.ModelSerializer):
         for tag_name in tags_data:
             tagged_user = CustomUser.objects.filter(profile_name=tag_name).first()
             if not tagged_user:
-                raise ValidationError({'tags': f"User '{tag_name}' does not exist."})
+                raise ValidationError({"tags": f"User '{tag_name}' does not exist."})
             tag, created = ProfileTag.objects.get_or_create(
                 tagged_user=tagged_user,
                 tagger=post.author,
                 content_type=ContentType.objects.get_for_model(Post),
-                object_id=post.id
+                object_id=post.id,
             )
             tag_objects.append(tag)
         post.tags.set(tag_objects)
@@ -113,10 +131,12 @@ class PostSerializer(serializers.ModelSerializer):
         """
         Validate the uploaded image for format and size.
         """
-        if value and not value.name.lower().endswith(('jpg', 'jpeg', 'png', 'gif', 'webp')):
-            raise serializers.ValidationError('Upload a valid image.')
+        if value and not value.name.lower().endswith(
+            ("jpg", "jpeg", "png", "gif", "webp")
+        ):
+            raise serializers.ValidationError("Upload a valid image.")
         if value.size > 2 * 1024 * 1024:
-            raise serializers.ValidationError('Image must be less than 2MB.')
+            raise serializers.ValidationError("Image must be less than 2MB.")
         return value
 
 
@@ -124,6 +144,7 @@ class LimitedPostSerializer(serializers.ModelSerializer):
     """
     Serializer for limited post information with image URL.
     """
+
     author = serializers.CharField(source="author.profile_name", read_only=True)
     image_url = serializers.SerializerMethodField()
 

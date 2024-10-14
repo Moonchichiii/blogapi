@@ -1,40 +1,37 @@
 import logging
-
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
-from rest_framework import generics, status
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 
 from .models import Profile
 from .serializers import ProfileSerializer
-from .messages import profile_success_response
 from backend.permissions import IsOwnerOrReadOnly
 
-CACHE_TIMEOUT = 60 * 15
-
+CACHE_TIMEOUT = 60 * 30
 logger = logging.getLogger(__name__)
 
 
 class CustomPagination(PageNumberPagination):
-    """Custom pagination class with page size settings."""
+    """Custom pagination settings."""
+
     page_size = 10
-    page_size_query_param = 'page_size'
+    page_size_query_param = "page_size"
     max_page_size = 100
 
 
 class ProfileList(generics.ListAPIView):
-    """API view to list profiles with pagination and caching."""
+    """List profiles with custom pagination."""
+
     serializer_class = ProfileSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     pagination_class = CustomPagination
 
     def get_queryset(self):
-        """
-        Get the queryset for profiles ordered by popularity score.
-        """
-        return Profile.objects.order_by('-popularity_score')
+        """Return profiles ordered by popularity score."""
+        return Profile.objects.order_by("-popularity_score").select_related("user")
 
     @method_decorator(cache_page(CACHE_TIMEOUT))
     def list(self, request, *args, **kwargs):
@@ -48,80 +45,34 @@ class ProfileList(generics.ListAPIView):
         return Response(serializer.data)
 
 
-class ProfileDetail(generics.RetrieveUpdateAPIView):
-    """API view to retrieve and update a profile."""
-    serializer_class = ProfileSerializer
-    permission_classes = [IsOwnerOrReadOnly]
-    lookup_field = 'user_id'
-    queryset = Profile.objects.select_related('user').prefetch_related('user__posts')
+class ProfileDetailView(generics.RetrieveUpdateAPIView):
+    """Retrieve or update a profile."""
 
-    def get_serializer_context(self):
-        """Get serializer context with request data."""
-        context = super().get_serializer_context()
-        context.update({"request": self.request})
-        return context
+    queryset = Profile.objects.all()
+    serializer_class = ProfileSerializer
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    lookup_field = "user__id"
+    lookup_url_kwarg = "user_id"
 
     def retrieve(self, request, *args, **kwargs):
-        """Retrieve a profile and hide email if not the owner."""
+        """Retrieve a profile."""
         instance = self.get_object()
         serializer = self.get_serializer(instance)
-        data = serializer.data
-        if request.user != instance.user:
-            data.pop('email', None)
-        return Response(
-            {
-                'data': data,
-                'message': 'Profile retrieved successfully.',
-                'type': 'success'
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response(serializer.data)
 
-    def patch(self, request, *args, **kwargs):
-        """Partially update a profile."""
-        partial = kwargs.pop('partial', True)
+    def update(self, request, *args, **kwargs):
+        """Update a profile."""
+        partial = kwargs.pop("partial", False)
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        
-        # Refresh the instance to get updated data
-        instance.refresh_from_db()
-        updated_serializer = self.get_serializer(instance)
-        
-        return Response(
-            {
-                'data': updated_serializer.data,
-                'message': 'Profile updated successfully.',
-                'type': 'success'
-            },
-            status=status.HTTP_200_OK
-        )
 
+        if getattr(instance, "_prefetched_objects_cache", None):
+            instance._prefetched_objects_cache = {}
 
-class CurrentUserProfileView(generics.RetrieveUpdateAPIView):
-    """API view to retrieve and update the current user's profile."""
-    serializer_class = ProfileSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_object(self):
-        """Get the current user's profile."""
-        return self.request.user.profile
+        return Response(serializer.data)
 
     def perform_update(self, serializer):
-        """Update the profile and handle image changes."""
-        image_changed = 'image' in serializer.validated_data
-        old_image = None
-        if image_changed:
-            old_image = self.get_object().image
-
+        """Save the updated profile."""
         serializer.save()
-
-        if old_image:
-            old_image.delete()
-
-        return profile_success_response(
-            "Your profile has been updated.", serializer.data
-        )
-
-

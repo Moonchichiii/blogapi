@@ -1,5 +1,6 @@
 from django.contrib.auth.base_user import BaseUserManager
 
+
 class CustomUserManager(BaseUserManager):
     """Manager for CustomUser model."""
 
@@ -17,13 +18,13 @@ class CustomUserManager(BaseUserManager):
 
     def create_superuser(self, email, profile_name, password=None, **extra_fields):
         """Create and return a superuser with an email and profile name."""
-        extra_fields.setdefault('is_staff', True)
-        extra_fields.setdefault('is_superuser', True)
-        extra_fields.setdefault('is_active', True)  
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("is_active", True)
 
-        if extra_fields.get('is_staff') is not True:
-            raise ValueError('Superuser must have is_staff=True.')
-        if extra_fields.get('is_superuser') is not True:
-            raise ValueError('Superuser must have is_superuser=True.')
+        if extra_fields.get("is_staff") is not True:
+            raise ValueError("Superuser must have is_staff=True.")
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError("Superuser must have is_superuser=True.")
 
         return self.create_user(email, profile_name, password, **extra_fields)

@@ -6,15 +6,23 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0003_remove_customuser_first_name_and_more'),
+        ("accounts", "0003_remove_customuser_first_name_and_more"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='BlacklistedAccessToken',
+            name="BlacklistedAccessToken",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('jti', models.CharField(max_length=255, unique=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("jti", models.CharField(max_length=255, unique=True)),
             ],
         ),
     ]

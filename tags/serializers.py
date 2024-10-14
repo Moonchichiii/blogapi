@@ -13,17 +13,17 @@ class ProfileTagSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProfileTag
-        fields = ['id', 'tagged_user', 'content_type', 'object_id', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        fields = ["id", "tagged_user", "content_type", "object_id", "created_at"]
+        read_only_fields = ["id", "created_at"]
 
     def validate(self, attrs):
         """
         Validate the ProfileTag data.
         """
-        request = self.context.get('request')
-        tagged_user = attrs.get('tagged_user')
-        content_type = attrs.get('content_type')
-        object_id = attrs.get('object_id')
+        request = self.context.get("request")
+        tagged_user = attrs.get("tagged_user")
+        content_type = attrs.get("content_type")
+        object_id = attrs.get("object_id")
 
         # Prevent tagging yourself
         if tagged_user == request.user:

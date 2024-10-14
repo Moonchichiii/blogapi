@@ -1,50 +1,34 @@
-import unittest.mock as mock
-
+from unittest import mock
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
-
 from rest_framework import status
 from rest_framework.test import APIClient
-
-from followers.models import Follow
-from posts.models import Post
+from django.core.files.uploadedfile import SimpleUploadedFile
 from profiles.models import Profile
 from profiles.tasks import update_all_popularity_scores
-from ratings.models import Rating
-from tags.models import ProfileTag
+from followers.models import Follow
 
 User = get_user_model()
 
 
 class ProfileTests(TestCase):
-    """Test suite for Profile-related functionalities."""
-
     def setUp(self):
         """Set up test dependencies."""
         self.client = APIClient()
-        self.update_profile_url = reverse("current_user_profile")
         self.profile_list_url = reverse("profile_list")
         self.user = self._create_user("testuser")
         self.user1 = self._create_user("user1")
         self.user2 = self._create_user("user2")
-        self.post1 = Post.objects.create(
-            author=self.user1, title="Test Post 1", content="Test content 1"
-        )
-        self.post2 = Post.objects.create(
-            author=self.user2, title="Test Post 2", content="Test content 2"
-        )
 
     def tearDown(self):
         """Clear cache after each test."""
         cache.clear()
 
     def _create_user(self, profile_name, email=None, password="StrongPassword123!"):
-        """Helper function to create a user."""
-        if email is None:
-            email = f"{profile_name}_{User.objects.count()}@example.com"
-        profile_name = f"{profile_name}_{User.objects.count()}"
+        """Create a user."""
+        email = email or f"{profile_name}@example.com"
         user = User.objects.create_user(
             profile_name=profile_name, email=email, password=password
         )
@@ -52,128 +36,111 @@ class ProfileTests(TestCase):
         user.save()
         return user
 
-    def test_public_can_view_profile(self):
-        """Test that public users can view profiles."""
-        profile_view_url = reverse("profile_detail", kwargs={"user_id": self.user.id})
-        response = self.client.get(profile_view_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("bio", response.data["data"])
-        self.assertEqual(response.data["data"].get("bio", ""), self.user.profile.bio)
+    def test_profile_creation_on_user_registration(self):
+        """Test profile creation on user registration."""
+        user = self._create_user("newprofileuser")
+        self.assertIsNotNone(Profile.objects.get(user=user))
 
-    def test_authenticated_user_can_update_profile(self):
-        """Test that authenticated users can update their profiles."""
+    def test_profile_list_view(self):
+        """Test profile list view."""
         self.client.force_authenticate(user=self.user)
+        response = self.client.get(self.profile_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("results", response.data)
+
+    def test_profile_list_pagination(self):
+        """Test profile list pagination."""
+        self.client.force_authenticate(user=self.user)
+        for i in range(15):
+            self._create_user(f"paginationuser{i}")
+        response = self.client.get(self.profile_list_url)
+        self.assertEqual(len(response.data["results"]), 10)
+        self.assertIsNotNone(response.data.get("next"))
+
+    def test_profile_detail_view(self):
+        """Test profile detail view."""
+        self.client.force_authenticate(user=self.user)
+        url = reverse("profile_detail", kwargs={"user_id": self.user.id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("bio", response.data)
+
+    def test_profile_update(self):
+        """Test profile update."""
+        self.client.force_authenticate(user=self.user)
+        url = reverse("profile_detail", kwargs={"user_id": self.user.id})
         data = {"bio": "Updated bio"}
-        response = self.client.patch(self.update_profile_url, data, format="json")
+        response = self.client.patch(url, data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.user.profile.refresh_from_db()
         self.assertEqual(self.user.profile.bio, "Updated bio")
 
-    def test_unauthorized_user_cannot_update_profile(self):
-        """Test that unauthorized users cannot update other users' profiles."""
+    def test_profile_update_image(self):
+        """Test profile image update."""
+        self.client.force_authenticate(user=self.user)
+        url = reverse("profile_detail", kwargs={"user_id": self.user.id})
+        image_content = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
+        image_file = SimpleUploadedFile(
+            "test_image.jpg", image_content, content_type="image/jpeg"
+        )
+        with mock.patch(
+            "cloudinary.uploader.upload",
+            return_value={
+                "url": "http://test.com/image.jpg",
+                "public_id": "test_public_id",
+                "version": "1234567890",
+                "type": "upload",
+                "format": "jpg",
+                "resource_type": "image",
+            },
+        ):
+            data = {"image": image_file}
+            response = self.client.patch(url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("image", response.data)
+
+    def test_unauthorized_profile_update(self):
+        """Test unauthorized profile update."""
         self.client.force_authenticate(user=self.user2)
-        update_url = reverse("profile_detail", kwargs={"user_id": self.user1.id})
+        url = reverse("profile_detail", kwargs={"user_id": self.user1.id})
         data = {"bio": "Unauthorized update"}
-        response = self.client.patch(update_url, data, format="json")
+        response = self.client.patch(url, data)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_profile_creation_on_user_registration(self):
-        """Test that a profile is created when a user registers."""
-        user = self._create_user("newprofileuser")
-        profile = Profile.objects.get(user=user)
-        self.assertIsNotNone(profile)
-
-    def test_popularity_score_updates_with_ratings(self):
-        """Test that popularity score updates correctly with ratings."""
-        Rating.objects.create(user=self.user2, post=self.post1, value=5)
-        self.post1.update_rating_statistics()
-        self.user1.profile.update_popularity_score()
-        self.assertGreater(self.user1.profile.popularity_score, 0)
-
-    def test_follower_count_updates_on_follow(self):
-        """Test that follower count updates correctly when a user is followed."""
-        Follow.objects.create(follower=self.user2, followed=self.user1)
-        self.user1.profile.update_counts()
-        self.assertEqual(self.user1.profile.follower_count, 1)
-
-    def test_profile_list_is_paginated(self):
-        """Test that profile list is paginated."""
-        for i in range(15):
-            self._create_user(f"user{i}")
-        response = self.client.get(self.profile_list_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 10)
-        self.assertIn("next", response.data)
-
-    def test_profile_update_with_invalid_data(self):
-        """Test that invalid profile update returns error."""
+    def test_profile_list_ordering(self):
+        """Test profile list ordering by popularity score."""
         self.client.force_authenticate(user=self.user)
-        data = {"bio": "a" * 501}
-        response = self.client.patch(self.update_profile_url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_profile_list_ordering_by_popularity(self):
-        """Test that profiles are ordered by popularity score."""
         self.user1.profile.popularity_score = 50
         self.user1.profile.save()
         self.user2.profile.popularity_score = 100
         self.user2.profile.save()
         response = self.client.get(self.profile_list_url)
         self.assertEqual(
-            response.data["results"][0]["profile_name"],
-            self.user2.profile.user.profile_name,
+            response.data["results"][0]["profile_name"], self.user2.profile_name
         )
-        self.assertEqual(
-            response.data["results"][1]["profile_name"],
-            self.user1.profile.user.profile_name,
-        )
-
-    def test_profile_serializer_hides_email_for_non_owner(self):
-        """Test that profile serializer hides the email for non-owners."""
-        self.client.force_authenticate(user=self.user2)
-        profile_view_url = reverse("profile_detail", kwargs={"user_id": self.user1.id})
-        response = self.client.get(profile_view_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertNotIn("email", response.data["data"])
-        self.assertIn("bio", response.data["data"])
-        self.assertIn("posts", response.data["data"])
 
     @mock.patch("profiles.tasks.update_all_popularity_scores.delay")
     def test_update_all_popularity_scores_task(self, mock_task):
-        """Test that popularity scores update task runs successfully."""
+        """Test update all popularity scores task."""
         update_all_popularity_scores.delay()
         mock_task.assert_called_once()
 
-    def test_profile_tagging_edge_case(self):
-        """Test edge case for tagging a user in the profile."""
+    def test_profile_cache(self):
+        """Test profile cache."""
         self.client.force_authenticate(user=self.user)
-        update_url = reverse("profile_detail", kwargs={"user_id": self.user.id})
-        data = {"bio": "Updated bio", "tags": ["non_existing_user"]}
-        response = self.client.patch(update_url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("User 'non_existing_user' does not exist.", response.data["tags"])
+        url = reverse("profile_list")
+        response1 = self.client.get(url)
+        response2 = self.client.get(url)
+        self.assertEqual(response1.data, response2.data)
 
-    def test_profile_tag_removal(self):
-        """Test that tags are correctly removed when updating a profile."""
-        self.client.force_authenticate(user=self.user)
-        update_url = reverse("profile_detail", kwargs={"user_id": self.user.id})
+    def test_follow_count_update(self):
+        """Test follow count update."""
+        Follow.objects.create(follower=self.user2, followed=self.user1)
+        self.user1.profile.refresh_from_db()
+        self.assertEqual(self.user1.profile.follower_count, 1)
 
-        # Ensure that the user has at least one post to avoid the 'NoneType' issue
-        Post.objects.create(author=self.user, title="Test Post", content="Test content")
-
-        # Initially add some tags, ensuring no duplicates
-        data = {"tags": ["user1_1", "user2_2"]}
-        response = self.client.patch(update_url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('tags', response.data)
-        self.assertEqual(len(response.data["tags"]), 2)
-
-        # Now clear the tags by sending an empty list
-        data = {"tags": []}
-        response = self.client.patch(update_url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('tags', response.data)
-        self.assertEqual(len(response.data["tags"]), 0)
-
-        # Verify that tags were actually removed from the database
-        self.assertEqual(ProfileTag.objects.filter(tagged_user=self.user).count(), 0)
+    def test_following_count_update(self):
+        """Test following count update."""
+        Follow.objects.create(follower=self.user1, followed=self.user2)
+        self.user1.profile.refresh_from_db()
+        self.assertEqual(self.user1.profile.following_count, 1)

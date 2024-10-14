@@ -1,17 +1,27 @@
 from rest_framework import serializers
 from .models import Comment
 
+
 class CommentSerializer(serializers.ModelSerializer):
     """
     Serializer for Comment model.
     """
-    author = serializers.CharField(source='author.profile_name', read_only=True)
+
+    author = serializers.CharField(source="author.profile_name", read_only=True)
     author_image = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
-        fields = ['id', 'post', 'author', 'author_image', 'content', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'author', 'created_at', 'updated_at']
+        fields = [
+            "id",
+            "post",
+            "author",
+            "author_image",
+            "content",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "author", "created_at", "updated_at"]
 
     def get_author_image(self, obj):
         """
@@ -24,7 +34,7 @@ class CommentSerializer(serializers.ModelSerializer):
         Customize the representation of the Comment instance.
         """
         representation = super().to_representation(instance)
-        request = self.context.get('request')
+        request = self.context.get("request")
         if request and not request.user.is_authenticated:
-            representation.pop('content', None)
+            representation.pop("content", None)
         return representation
