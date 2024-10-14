@@ -189,3 +189,4 @@ locustfile.py
 *.locust.py
 locustest.py
 locustfile.py
+.coveragerc
