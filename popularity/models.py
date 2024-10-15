@@ -12,6 +12,7 @@ class PopularityMetrics(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=['popularity_score']),
+            models.Index(fields=['follower_count']),
         ]
 
     def __str__(self):

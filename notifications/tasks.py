@@ -3,12 +3,6 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from .models import Notification
 from tags.models import ProfileTag
-from notifications.tasks import send_notification_task
-
-from .utils import send_notification_task
-from .utils import send_notification_task as send_notification_task_util
-send_notification_task = send_notification_task_util
-
 
 # Tasks
 @shared_task
@@ -19,7 +13,6 @@ def send_notification_task(user_id, notification_type, message):
     )
 
 # Signal Handlers
-
 
 # Tagging-related Signals
 @receiver(post_save, sender=ProfileTag)

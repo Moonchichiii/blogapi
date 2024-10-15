@@ -5,4 +5,7 @@ from popularity.tasks import aggregate_popularity_score
 
 @receiver(post_save, sender=Rating)
 def update_popularity_on_rating(sender, instance, **kwargs):
+    """
+    Update the profile's popularity score when a rating is saved.
+    """
     aggregate_popularity_score.delay(instance.post.author.id)

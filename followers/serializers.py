@@ -1,43 +1,17 @@
 from rest_framework import serializers
-from django.db.models import Avg, Count
 from .models import Follow
-from posts.models import Post
 
 class FollowSerializer(serializers.ModelSerializer):
-    profile_name = serializers.CharField(source="follower.profile.profile_name", read_only=True)
-    popularity_score = serializers.FloatField(read_only=True)
-    average_rating = serializers.FloatField(read_only=True)
-    post_count = serializers.IntegerField(read_only=True)
-
     class Meta:
         model = Follow
-        fields = [
-            "id", "follower", "followed", "created_at",
-            "profile_name", "popularity_score", "average_rating", "post_count"
-        ]
-        read_only_fields = [
-            "id", "follower", "created_at",
-            "profile_name", "popularity_score", "average_rating", "post_count"
-        ]
+        fields = ['id', 'follower', 'followed', 'created_at']
+        read_only_fields = ['id', 'follower', 'created_at']
 
+    def create(self, validated_data):
+        print("Creating Follow instance with data:", validated_data)
+        return super().create(validated_data)
 
-    def get_average_rating(self, obj):
-        """Calculate the average rating of posts by the follower."""
-        # Using pre-fetched data to avoid N+1 queries
-        if hasattr(obj, "average_rating"):
-            return obj.average_rating
-        return Post.objects.filter(author=obj.follower).aggregate(Avg("average_rating"))["average_rating__avg"] or 0
-
-    def get_post_count(self, obj):
-        """Count the number of posts by the follower."""
-        if hasattr(obj, "post_count"):
-            return obj.post_count
-        return Post.objects.filter(author=obj.follower).count()
-
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        if self.context.get('request').query_params.get('order_by') != 'popularity':
-            representation.pop('popularity_score', None)
-            representation.pop('average_rating', None)
-            representation.pop('post_count', None)
-        return representation
+    def update(self, instance, validated_data):
+        print("Updating Follow instance:", instance)
+        print("With data:", validated_data)
+        return super().update(instance, validated_data)

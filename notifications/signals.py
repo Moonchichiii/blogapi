@@ -16,6 +16,7 @@ def create_follow_notification(sender, instance, created, **kwargs):
             message=message
         )
 
+
 @receiver(post_save, sender=Comment)
 def create_comment_notification(sender, instance, created, **kwargs):
     if created and instance.post.author != instance.author:

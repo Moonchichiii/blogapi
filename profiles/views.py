@@ -1,5 +1,5 @@
 import logging
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Subquery, Exists
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from rest_framework import generics
@@ -9,37 +9,47 @@ from rest_framework.pagination import PageNumberPagination
 
 from .models import Profile
 from .serializers import ProfileSerializer
+from followers.models import Follow
 from popularity.models import PopularityMetrics
 from backend.permissions import IsOwnerOrReadOnly
 
 CACHE_TIMEOUT = 60 * 30
 logger = logging.getLogger(__name__)
 
-
 class CustomPagination(PageNumberPagination):
     """Custom pagination settings."""
-
     page_size = 10
     page_size_query_param = "page_size"
     max_page_size = 100
 
-
-class ProfileList(generics.ListAPIView):
-    """List profiles with custom pagination."""
-
+class ProfileListView(generics.ListAPIView):
     serializer_class = ProfileSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = CustomPagination
 
     def get_queryset(self):
-        popularity_subquery = PopularityMetrics.objects.filter(user=OuterRef('user')).values('popularity_score')
-        return Profile.objects.annotate(
+        user = self.request.user
+        filter_type = self.request.query_params.get('filter', 'popular')
+
+        # Subquery to get popularity score
+        popularity_subquery = PopularityMetrics.objects.filter(
+            user=OuterRef('user')
+        ).values('popularity_score')[:1]
+
+        queryset = Profile.objects.annotate(
             popularity_score=Subquery(popularity_subquery)
-        ).order_by('-popularity_score')
+        )
+
+        if filter_type == 'followed':
+            queryset = queryset.filter(
+                Exists(Follow.objects.filter(follower=user, followed=OuterRef('user')))
+            )
+        
+        return queryset.order_by('-popularity_score', 'user__profile_name')
 
     @method_decorator(cache_page(CACHE_TIMEOUT))
     def list(self, request, *args, **kwargs):
-        """List profiles with caching."""
+        """Cache and paginate profile listings."""
         queryset = self.get_queryset()
         page = self.paginate_queryset(queryset)
         if page is not None:
@@ -48,10 +58,8 @@ class ProfileList(generics.ListAPIView):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
-
 class ProfileDetailView(generics.RetrieveUpdateAPIView):
     """Retrieve or update a profile."""
-
     queryset = Profile.objects.all()
     serializer_class = ProfileSerializer
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]

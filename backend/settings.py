@@ -188,12 +188,14 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Celery settings
 CELERY_BROKER_URL = "redis://localhost:6379/1"
 CELERY_RESULT_BACKEND = "redis://localhost:6379/1"
+
 CELERY_BEAT_SCHEDULE = {
     "update-popularity-scores": {
-        "task": "profiles.tasks.update_all_popularity_scores",
-        "schedule": crontab(hour=0, minute=0),
+        "task": "popularity.tasks.update_all_popularity_scores",
+        "schedule": crontab(hour=0, minute=0), 
     },
 }
+
 
 # REST Framework Settings
 REST_FRAMEWORK = {

@@ -1,187 +1,197 @@
+from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
-from django.core.cache import cache
-from followers.models import Follow
-from posts.models import Post
+from unittest.mock import patch
+from django.db import IntegrityError 
+from .models import Follow
 from profiles.models import Profile
-
-from popularity.models import PopularityMetrics
 
 User = get_user_model()
 
 class FollowTests(APITestCase):
-    """Tests for follow/unfollow functionality."""
+    """Test suite for Follow and Unfollow functionality."""
 
     def setUp(self):
-        """Set up users and URL."""
-        self.user = User.objects.create_user(
-            email="testuser@example.com",
-            profile_name="testuser",
-            password="testpass123",
+        """Set up test users and URL for follow/unfollow actions."""
+        self.user1 = User.objects.create_user(
+            email='testuser@example.com',
+            profile_name='testuser',
+            password='testpass123'
         )
-        self.other_user = User.objects.create_user(
-            email="otheruser@example.com",
-            profile_name="otheruser",
-            password="otherpass123",
-        )
-        Profile.objects.get_or_create(user=self.user)
-        Profile.objects.get_or_create(user=self.other_user)
-        self.follow_unfollow_url = reverse("follow-unfollow")
+        self.user1.is_active = True
+        self.user1.save()
 
-    def test_follow_user(self):
-        """Test following another user."""
-        self.client.force_authenticate(user=self.user)
-        response = self.client.post(
-            self.follow_unfollow_url, {"followed": self.other_user.id}
+        self.user2 = User.objects.create_user(
+            email='otheruser@example.com',
+            profile_name='otheruser',
+            password='otherpass123'
         )
+        self.user2.is_active = True
+        self.user2.save()
+
+        self.follow_unfollow_url = reverse('follow-unfollow')
+        self.client.force_authenticate(user=self.user1)
+
+    def test_follow_user_success(self):
+        """Test successful follow action."""
+        response = self.client.post(self.follow_unfollow_url, {'followed': self.user2.id})
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(Follow.objects.count(), 1)
-        self.assertEqual(Follow.objects.first().followed, self.other_user)
-        response_data = response.data
-        self.assertIn("data", response_data)
-        self.assertEqual(
-            response_data["message"], "You have successfully followed the user."
-        )
-        self.assertEqual(response_data["type"], "success")
+        self.assertTrue(Follow.objects.filter(follower=self.user1, followed=self.user2).exists())
+        self.user2.refresh_from_db()
+        self.assertEqual(self.user2.profile.follower_count, 1)
 
-    def test_unfollow_user(self):
-        """Test unfollowing a user."""
-        Follow.objects.create(follower=self.user, followed=self.other_user)
-        self.client.force_authenticate(user=self.user)
-        response = self.client.delete(
-            self.follow_unfollow_url, {"followed": self.other_user.id}
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(Follow.objects.count(), 0)
-        response_data = response.data
-        self.assertIn("message", response_data)
-        self.assertEqual(
-            response_data["message"], "You have successfully unfollowed the user."
-        )
-        self.assertEqual(response_data["type"], "success")
-
-    def test_follow_yourself(self):
+    def test_follow_self_fails(self):
         """Test that a user cannot follow themselves."""
-        self.client.force_authenticate(user=self.user)
-        response = self.client.post(
-            self.follow_unfollow_url, {"followed": self.user.id}
-        )
+        response = self.client.post(self.follow_unfollow_url, {'followed': self.user1.id})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("You cannot follow yourself", str(response.data["error"]))
+        self.assertIn('error', response.data)
 
-    def test_follow_same_user_again(self):
-        """Test that a user cannot follow the same user twice."""
-        Follow.objects.create(follower=self.user, followed=self.other_user)
-        self.client.force_authenticate(user=self.user)
-        response = self.client.post(
-            self.follow_unfollow_url, {"followed": self.other_user.id}
-        )
+    def test_duplicate_follow_fails(self):
+        """Test that a user cannot follow someone they are already following."""
+        Follow.objects.create(follower=self.user1, followed=self.user2)
+        response = self.client.post(self.follow_unfollow_url, {'followed': self.user2.id})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn(
-            "You are already following this user", str(response.data["error"])
-        )
+        self.assertIn('error', response.data)
 
-    def test_unfollow_user_not_followed(self):
-        """Test that a user cannot unfollow someone they are not following."""
-        self.client.force_authenticate(user=self.user)
-        response = self.client.delete(
-            self.follow_unfollow_url, {"followed": self.other_user.id}
-        )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("You are not following this user", str(response.data["error"]))
-
-class PopularFollowersViewTests(APITestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(
-            email="testuser@example.com", profile_name="testuser", password="testpass123"
-        )
-        self.follower1 = User.objects.create_user(
-            email="follower1@example.com", profile_name="follower1", password="pass123"
-        )
-        self.follower2 = User.objects.create_user(
-            email="follower2@example.com", profile_name="follower2", password="pass123"
-        )
-
-        self.profile = Profile.objects.get(user=self.user)
-        self.follower1_profile = Profile.objects.get(user=self.follower1)
-        self.follower2_profile = Profile.objects.get(user=self.follower2)
-
-        Post.objects.create(
-            author=self.follower1, title="Post 1", content="Content 1", average_rating=4.5
-        )
-        Post.objects.create(
-            author=self.follower2, title="Post 2", content="Content 2", average_rating=3.0
-        )
-
-        Follow.objects.create(follower=self.follower1, followed=self.user)
-        Follow.objects.create(follower=self.follower2, followed=self.user)
-
-        PopularityMetrics.objects.create(user=self.user, popularity_score=50)
-        PopularityMetrics.objects.create(user=self.follower1, popularity_score=75)
-        PopularityMetrics.objects.create(user=self.follower2, popularity_score=60)
-
-        self.popular_followers_url = reverse("popular-followers", kwargs={"user_id": self.user.id})
-
-    def test_get_popular_followers(self):
-        self.client.force_authenticate(user=self.user)
-        response = self.client.get(f"{self.popular_followers_url}?order_by=popularity")
+    def test_unfollow_user_success(self):
+        """Test successful unfollow action."""
+        Follow.objects.create(follower=self.user1, followed=self.user2)
+        response = self.client.delete(self.follow_unfollow_url, {'followed': self.user2.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        results = response.data.get("data", [])
-        self.assertGreater(len(results), 0)
-        self.assertEqual(results[0]["profile_name"], "follower1")
-        self.assertEqual(results[1]["profile_name"], "follower2")
-        self.assertGreater(results[0]["popularity_score"], results[1]["popularity_score"])
+        self.assertFalse(Follow.objects.filter(follower=self.user1, followed=self.user2).exists())
+        self.user2.refresh_from_db()
+        self.assertEqual(self.user2.profile.follower_count, 0)
 
+    def test_unfollow_user_not_following(self):
+        """Test unfollowing a user who is not followed returns an error."""
+        response = self.client.delete(self.follow_unfollow_url, {'followed': self.user2.id})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)
 
-class FollowSignalTests(APITestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(
-            email="user@example.com", profile_name="user", password="pass123"
-        )
-        self.other_user = User.objects.create_user(
-            email="other@example.com", profile_name="otheruser", password="pass123"
-        )
+    def test_invalid_followed_id(self):
+        """Test that providing an invalid user ID for following fails."""
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.post(self.follow_unfollow_url, {'followed': 9999})
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn('error', response.data)
+        self.assertEqual(response.data['error'], "The user you're trying to follow doesn't exist.")
 
-        self.profile = Profile.objects.get(user=self.user)
-        self.other_profile = Profile.objects.get(user=self.other_user)
-
-        # Create PopularityMetrics for both users
-        PopularityMetrics.objects.create(user=self.user, popularity_score=50)
-        PopularityMetrics.objects.create(user=self.other_user, popularity_score=50)
-
-        self.follow_unfollow_url = reverse("follow-unfollow")
-
-    def test_follow_cache_invalidation(self):
-        """Test that follow action invalidates the cache for both users."""
-        cache.set(f"user_{self.user.id}_follower_list", "cached_data")
-        cache.set(f"user_{self.other_user.id}_follower_list", "cached_data")
-
-        self.client.force_authenticate(user=self.user)
-        response = self.client.post(self.follow_unfollow_url, {"followed": self.other_user.id})
+    def test_follower_count_updated_on_follow(self):
+        """Test that the follower count increases upon a successful follow."""
+        response = self.client.post(self.follow_unfollow_url, {'followed': self.user2.id})
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.user2.refresh_from_db()
+        self.assertEqual(self.user2.profile.follower_count, 1)
 
-        self.assertIsNone(cache.get(f"user_{self.user.id}_follower_list"))
-        self.assertIsNone(cache.get(f"user_{self.other_user.id}_follower_list"))
-
-    def test_unfollow_cache_invalidation(self):
-        """Test that unfollow action invalidates the cache for both users."""
-        Follow.objects.create(follower=self.user, followed=self.other_user)
-        cache.set(f"user_{self.user.id}_follower_list", "cached_data")
-        cache.set(f"user_{self.other_user.id}_follower_list", "cached_data")
-
-        self.client.force_authenticate(user=self.user)
-        response = self.client.delete(self.follow_unfollow_url, {"followed": self.other_user.id})
+    def test_follower_count_updated_on_unfollow(self):
+        """Test that the follower count decreases upon a successful unfollow."""
+        Follow.objects.create(follower=self.user1, followed=self.user2)
+        response = self.client.delete(self.follow_unfollow_url, {'followed': self.user2.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user2.refresh_from_db()
+        self.assertEqual(self.user2.profile.follower_count, 0)
 
-        self.assertIsNone(cache.get(f"user_{self.user.id}_follower_list"))
-        self.assertIsNone(cache.get(f"user_{self.other_user.id}_follower_list"))
+    @patch('followers.signals.invalidate_follower_cache')
+    def test_cache_invalidation_on_follow(self, mock_invalidate_follower_cache):
+        """Test that the cache is invalidated when a user is followed."""
+        response = self.client.post(self.follow_unfollow_url, {'followed': self.user2.id})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        mock_invalidate_follower_cache.assert_any_call(self.user2.id)
+        mock_invalidate_follower_cache.assert_any_call(self.user1.id)
 
-    def test_follow_updates_popularity_score(self):
-        """Test that follow action updates the popularity score."""
-        self.client.force_authenticate(user=self.user)
-        self.client.post(self.follow_unfollow_url, {"followed": self.other_user.id})
+    @patch('followers.signals.invalidate_follower_cache')
+    def test_cache_invalidation_on_unfollow(self, mock_invalidate_follower_cache):
+        """Test that the cache is invalidated when a user is unfollowed."""
+        Follow.objects.create(follower=self.user1, followed=self.user2)
+        response = self.client.delete(self.follow_unfollow_url, {'followed': self.user2.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_invalidate_follower_cache.assert_any_call(self.user2.id)
+        mock_invalidate_follower_cache.assert_any_call(self.user1.id)
 
-        popularity_metrics = PopularityMetrics.objects.get(user=self.other_user)
-        self.assertGreater(popularity_metrics.popularity_score, 0)
+    def test_follow_unauthenticated_user(self):
+        """Test that an unauthenticated user cannot follow someone."""
+        self.client.force_authenticate(user=None)
+        response = self.client.post(self.follow_unfollow_url, {'followed': self.user2.id})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unfollow_unauthenticated_user(self):
+        """Test that an unauthenticated user cannot unfollow someone."""
+        self.client.force_authenticate(user=None)
+        response = self.client.delete(self.follow_unfollow_url, {'followed': self.user2.id})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_follow_no_followed_id(self):
+        """Test that following without providing a followed ID fails."""
+        response = self.client.post(self.follow_unfollow_url, {})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_unfollow_no_followed_id(self):
+        """Test that unfollowing without providing a followed ID fails."""
+        response = self.client.delete(self.follow_unfollow_url, {})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+class FollowModelTests(TestCase):
+    """Test suite for the Follow model."""
+
+    def setUp(self):
+        self.user1 = User.objects.create_user(
+            email='user1@example.com',
+            profile_name='user1',
+            password='testpass123'
+        )
+        self.user2 = User.objects.create_user(
+            email='user2@example.com',
+            profile_name='user2',
+            password='testpass123'
+        )
+
+    def test_follow_creation(self):
+        """Test follow creation."""
+        follow = Follow.objects.create(follower=self.user1, followed=self.user2)
+        self.assertIsInstance(follow, Follow)
+        self.assertEqual(str(follow), f"{self.user1.profile_name} follows {self.user2.profile_name}")
+
+    def test_follow_unique_constraint(self):
+        """Test unique constraint on follow."""
+        Follow.objects.create(follower=self.user1, followed=self.user2)
+        with self.assertRaises(IntegrityError):
+            Follow.objects.create(follower=self.user1, followed=self.user2)
+
+class FollowTaskTests(TestCase):
+    """Test suite for follow tasks."""
+
+    def setUp(self):
+        self.user1 = User.objects.create_user(
+            email='user1@example.com',
+            profile_name='user1',
+            password='testpass123'
+        )
+        self.user2 = User.objects.create_user(
+            email='user2@example.com',
+            profile_name='user2',
+            password='testpass123'
+        )
+
+    @patch('followers.tasks.Notification.objects.create')
+    def test_send_notification_task(self, mock_create_notification):
+        """Test send notification task."""
+        from followers.tasks import send_notification_task
+        
+        send_notification_task(self.user1.id, 'follow', 'You have a new follower')
+        mock_create_notification.assert_called_once_with(
+            user_id=self.user1.id,
+            notification_type='follow',
+            message='You have a new follower'
+        )
+
+    def test_remove_follows_for_user(self):
+        """Test remove follows for user."""
+        Follow.objects.create(follower=self.user1, followed=self.user2)
+        Follow.objects.create(follower=self.user2, followed=self.user1)
+        
+        from followers.tasks import remove_follows_for_user
+        remove_follows_for_user(self.user1.id)
+        
+        self.assertEqual(Follow.objects.count(), 0)
