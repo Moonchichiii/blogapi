@@ -144,3 +144,23 @@ class ProfileTests(TestCase):
         Follow.objects.create(follower=self.user1, followed=self.user2)
         self.user1.profile.refresh_from_db()
         self.assertEqual(self.user1.profile.following_count, 1)
+        
+class ProfileFollowCountTests(TestCase):
+    def setUp(self):
+        self.user1 = User.objects.create_user(email='user1@example.com', profile_name='user1', password='pass')
+        self.user2 = User.objects.create_user(email='user2@example.com', profile_name='user2', password='pass')
+        self.profile1 = self.user1.profile
+        self.profile2 = self.user2.profile
+
+    def test_follow_updates_profile_counts(self):
+        self.assertEqual(self.profile1.follower_count, 0)
+        self.assertEqual(self.profile1.following_count, 0)
+        self.assertEqual(self.profile2.follower_count, 0)
+        self.assertEqual(self.profile2.following_count, 0)
+
+        Follow.objects.create(follower=self.user1, followed=self.user2)
+        self.profile1.refresh_from_db()
+        self.profile2.refresh_from_db()
+
+        self.assertEqual(self.profile1.following_count, 1)
+        self.assertEqual(self.profile2.follower_count, 1)

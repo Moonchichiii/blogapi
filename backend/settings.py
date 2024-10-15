@@ -64,7 +64,7 @@ INSTALLED_APPS = [
     "ratings",
     "tags",
     "followers",
-    "notifications",
+    'notifications.apps.NotificationsConfig',
 ]
 
 LOGIN_URL = "two_factor:login"

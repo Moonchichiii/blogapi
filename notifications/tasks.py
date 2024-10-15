@@ -1,11 +1,16 @@
 from celery import shared_task
-from .models import Notification
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from .models import ProfileTag
+from .models import Notification
+from tags.models import ProfileTag
 from notifications.tasks import send_notification_task
 
+from .utils import send_notification_task
+from .utils import send_notification_task as send_notification_task_util
+send_notification_task = send_notification_task_util
 
+
+# Tasks
 @shared_task
 def send_notification_task(user_id, notification_type, message):
     """Create a notification asynchronously."""
@@ -13,11 +18,17 @@ def send_notification_task(user_id, notification_type, message):
         user_id=user_id, notification_type=notification_type, message=message
     )
 
+# Signal Handlers
 
 
+# Tagging-related Signals
 @receiver(post_save, sender=ProfileTag)
 def notify_tagged_user(sender, instance, created, **kwargs):
-    """Send notification when a user is tagged in a post."""
+    """
+    Send notification when a user is tagged in a post.
+   
+    Triggered: After a ProfileTag instance is created.
+    """
     if created:
         message = f"You were tagged in a post by {instance.tagger.profile_name}."
         send_notification_task.delay(

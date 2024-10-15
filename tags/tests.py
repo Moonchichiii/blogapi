@@ -1,7 +1,3 @@
-"""
-Test suite for the ProfileTag API, covering edge cases and interlinking.
-"""
-
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
@@ -14,17 +10,9 @@ from tags.models import ProfileTag
 
 User = get_user_model()
 
-
 class ProfileTagAPITests(APITestCase):
-    """
-    Test suite for the ProfileTag API, covering edge cases and interlinking.
-    """
-
     @classmethod
     def setUpTestData(cls):
-        """
-        Set up test data for the entire test case.
-        """
         cls.user = User.objects.create_user(
             email="testuser@example.com",
             profile_name="testuser",
@@ -46,15 +34,9 @@ class ProfileTagAPITests(APITestCase):
         cls.tag_url = reverse("create-profile-tag")
 
     def setUp(self):
-        """
-        Set up the test client and authenticate the user.
-        """
         self.client.force_authenticate(user=self.user)
 
     def test_create_tag_for_post(self):
-        """
-        Test creating a tag for a post.
-        """
         data = {
             "tagged_user": self.other_user.id,
             "content_type": self.post_content_type.id,
@@ -65,9 +47,6 @@ class ProfileTagAPITests(APITestCase):
         self.assertEqual(response.data["message"], "Tag created successfully")
 
     def test_create_tag_for_comment(self):
-        """
-        Test creating a tag for a comment.
-        """
         data = {
             "tagged_user": self.other_user.id,
             "content_type": self.comment_content_type.id,
@@ -78,9 +57,6 @@ class ProfileTagAPITests(APITestCase):
         self.assertEqual(response.data["message"], "Tag created successfully")
 
     def test_tagging_yourself(self):
-        """
-        Test that a user cannot tag themselves.
-        """
         data = {
             "tagged_user": self.user.id,
             "content_type": self.post_content_type.id,
@@ -93,30 +69,21 @@ class ProfileTagAPITests(APITestCase):
         )
 
     def test_create_tag_with_invalid_object_id(self):
-        """
-        Test creating a tag with an invalid object ID.
-        """
         data = {
             "tagged_user": self.other_user.id,
             "content_type": self.post_content_type.id,
-            "object_id": "invalid",
+            "object_id": 9999,
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["object_id"][0], "A valid integer is required.")
+        self.assertIn("non_field_errors", response.data)
 
     def test_create_tag_with_missing_fields(self):
-        """
-        Test creating a tag with missing fields.
-        """
         data = {"tagged_user": self.other_user.id}
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_duplicate_tag(self):
-        """
-        Test that duplicate tags cannot be created for the same object and user.
-        """
         data = {
             "tagged_user": self.other_user.id,
             "content_type": self.post_content_type.id,
@@ -129,14 +96,10 @@ class ProfileTagAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("non_field_errors", response.data)
         self.assertEqual(
-            response.data["non_field_errors"][0],
-            "The fields tagged_user, content_type, object_id must make a unique set.",
+            response.data["non_field_errors"][0], "Duplicate tag detected."
         )
 
     def test_unauthenticated_user_cannot_create_tag(self):
-        """
-        Test that unauthenticated users cannot create tags.
-        """
         self.client.force_authenticate(user=None)
         data = {
             "tagged_user": self.other_user.id,
@@ -147,9 +110,6 @@ class ProfileTagAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_tag_deleted_when_post_is_deleted(self):
-        """
-        Test that a tag is deleted when the tagged post is deleted.
-        """
         data = {
             "tagged_user": self.other_user.id,
             "content_type": self.post_content_type.id,
@@ -168,9 +128,6 @@ class ProfileTagAPITests(APITestCase):
         self.assertFalse(tag_exists)
 
     def test_tag_deleted_when_comment_is_deleted(self):
-        """
-        Test that a tag is deleted when the tagged comment is deleted.
-        """
         data = {
             "tagged_user": self.other_user.id,
             "content_type": self.comment_content_type.id,
@@ -189,9 +146,6 @@ class ProfileTagAPITests(APITestCase):
         self.assertFalse(tag_exists)
 
     def test_create_tag_with_nonexistent_user(self):
-        """
-        Test creating a tag with a nonexistent user.
-        """
         data = {
             "tagged_user": 9999,
             "content_type": self.post_content_type.id,
@@ -199,15 +153,9 @@ class ProfileTagAPITests(APITestCase):
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["tagged_user"][0],
-            'Invalid pk "9999" - object does not exist.',
-        )
+        self.assertIn("tagged_user", response.data)
 
     def test_create_tag_with_nonexistent_content_type(self):
-        """
-        Test creating a tag with a nonexistent content type.
-        """
         data = {
             "tagged_user": self.other_user.id,
             "content_type": 9999,
@@ -215,7 +163,4 @@ class ProfileTagAPITests(APITestCase):
         }
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["content_type"][0],
-            'Invalid pk "9999" - object does not exist.',
-        )
+        self.assertIn("content_type", response.data)

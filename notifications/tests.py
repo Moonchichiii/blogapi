@@ -7,9 +7,9 @@ from .models import Notification
 from posts.models import Post
 from comments.models import Comment
 from followers.models import Follow
+from ratings.models import Rating
 
 User = get_user_model()
-
 
 class NotificationTests(TestCase):
     def setUp(self):
@@ -45,7 +45,7 @@ class NotificationTests(TestCase):
         post = Post.objects.create(
             author=self.user1, title="Test Post", content="Test Content"
         )
-        post.ratings.create(user=self.user2, value=5)
+        Rating.objects.create(post=post, user=self.user2, value=5)
         notifications = Notification.objects.filter(
             user=self.user1, notification_type="Rating"
         )
@@ -53,13 +53,16 @@ class NotificationTests(TestCase):
         self.assertIn(self.user2.profile_name, notifications.first().message)
 
     def test_list_notifications(self):
-        Notification.objects.create(
-            user=self.user1, notification_type="Test", message="Test Notification"
-        )
+        # Create multiple notifications
+        for i in range(15):
+            Notification.objects.create(
+                user=self.user1, notification_type="Test", message=f"Test Notification {i}"
+            )
         url = reverse("notification-list")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(len(response.data['results']), 10)  # Default page size
+        self.assertEqual(response.data['count'], 15)  # Total count
 
     def test_mark_notification_as_read(self):
         notification = Notification.objects.create(
