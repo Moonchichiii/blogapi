@@ -17,7 +17,7 @@ class Notification(models.Model):
         return f"Notification for {self.user.username} - {self.notification_type}"
 
     class Meta:
-        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["user", "is_read"]),
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['user', 'is_read']),
         ]

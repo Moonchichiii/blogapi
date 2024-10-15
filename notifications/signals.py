@@ -3,18 +3,15 @@ from django.dispatch import receiver
 from followers.models import Follow
 from comments.models import Comment
 from ratings.models import Rating
+from django.db import transaction
 from .models import Notification
 from .tasks import send_notification_task
 
 
 @receiver(post_save, sender=Follow)
-def create_follow_notification(sender, instance, created, **kwargs):
-    """
-    Create a notification when a user is followed.
-    """
+def update_profile_on_follow(sender, instance, created, **kwargs):
     if created:
-        message = f"{instance.follower.profile_name} followed you."
-        send_notification_task.delay(instance.followed.id, "Follow", message)
+        transaction.on_commit(lambda: instance.followed.profile.update_popularity_score())
 
 
 @receiver(post_save, sender=Comment)
