@@ -82,22 +82,21 @@ class ProfileTagAPITests(APITestCase):
         data = {"tagged_user": self.other_user.id}
         response = self.client.post(self.tag_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        def test_duplicate_tag(self):
+            data = {
+                "tagged_user": self.other_user.id,
+                "content_type": self.post_content_type.id,
+                "object_id": self.post.id,
+            }
+            response = self.client.post(self.tag_url, data)
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-    def test_duplicate_tag(self):
-        data = {
-            "tagged_user": self.other_user.id,
-            "content_type": self.post_content_type.id,
-            "object_id": self.post.id,
-        }
-        response = self.client.post(self.tag_url, data)
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-
-        response = self.client.post(self.tag_url, data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("non_field_errors", response.data)
-        self.assertEqual(
-            response.data["non_field_errors"][0], "Duplicate tag detected."
-        )
+            response = self.client.post(self.tag_url, data)
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertIn("non_field_errors", response.data)
+            self.assertEqual(
+                response.data["non_field_errors"][0],
+                "The fields tagged_user, content_type, object_id must make a unique set.")
 
     def test_unauthenticated_user_cannot_create_tag(self):
         self.client.force_authenticate(user=None)

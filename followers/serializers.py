@@ -4,23 +4,22 @@ from .models import Follow
 from posts.models import Post
 
 class FollowSerializer(serializers.ModelSerializer):
-    """Serializer for the Follow model with profile details and post statistics."""
-    
     profile_name = serializers.CharField(source="follower.profile.profile_name", read_only=True)
-    popularity_score = serializers.FloatField(source="follower.profile.popularity_score", read_only=True)
-    average_rating = serializers.SerializerMethodField()
-    post_count = serializers.SerializerMethodField()
+    popularity_score = serializers.FloatField(read_only=True)
+    average_rating = serializers.FloatField(read_only=True)
+    post_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Follow
         fields = [
-            "id", "follower", "followed", "created_at", 
+            "id", "follower", "followed", "created_at",
             "profile_name", "popularity_score", "average_rating", "post_count"
         ]
         read_only_fields = [
-            "id", "follower", "created_at", 
+            "id", "follower", "created_at",
             "profile_name", "popularity_score", "average_rating", "post_count"
         ]
+
 
     def get_average_rating(self, obj):
         """Calculate the average rating of posts by the follower."""
@@ -36,13 +35,9 @@ class FollowSerializer(serializers.ModelSerializer):
         return Post.objects.filter(author=obj.follower).count()
 
     def to_representation(self, instance):
-        """Customize the representation of the serialized data based on request parameters."""
         representation = super().to_representation(instance)
-        
-        # Remove specific fields if not ordered by 'popularity'
         if self.context.get('request').query_params.get('order_by') != 'popularity':
             representation.pop('popularity_score', None)
             representation.pop('average_rating', None)
             representation.pop('post_count', None)
-        
         return representation

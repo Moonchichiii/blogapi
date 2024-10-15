@@ -9,9 +9,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from profiles.models import Profile
 from profiles.tasks import update_all_popularity_scores
 from followers.models import Follow
+from popularity.models import PopularityMetrics
 
 User = get_user_model()
-
 
 class ProfileTests(TestCase):
     def setUp(self):
@@ -21,6 +21,11 @@ class ProfileTests(TestCase):
         self.user = self._create_user("testuser")
         self.user1 = self._create_user("user1")
         self.user2 = self._create_user("user2")
+        
+        # Create PopularityMetrics for test users
+        PopularityMetrics.objects.create(user=self.user, popularity_score=50)
+        PopularityMetrics.objects.create(user=self.user1, popularity_score=75)
+        PopularityMetrics.objects.create(user=self.user2, popularity_score=60)
 
     def tearDown(self):
         """Clear cache after each test."""
@@ -108,16 +113,11 @@ class ProfileTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_profile_list_ordering(self):
-        """Test profile list ordering by popularity score."""
         self.client.force_authenticate(user=self.user)
-        self.user1.profile.popularity_score = 50
-        self.user1.profile.save()
-        self.user2.profile.popularity_score = 100
-        self.user2.profile.save()
         response = self.client.get(self.profile_list_url)
-        self.assertEqual(
-            response.data["results"][0]["profile_name"], self.user2.profile_name
-        )
+        self.assertEqual(response.data["results"][0]["profile_name"], self.user1.profile_name)
+        self.assertEqual(response.data["results"][1]["profile_name"], self.user2.profile_name)
+        self.assertEqual(response.data["results"][2]["profile_name"], self.user.profile_name)
 
     @mock.patch("profiles.tasks.update_all_popularity_scores.delay")
     def test_update_all_popularity_scores_task(self, mock_task):

@@ -17,3 +17,5 @@ def update_all_popularity_scores():
             profile.update_popularity_score()
 
     return f"Updated popularity scores for {profiles.count()} profiles"
+
+

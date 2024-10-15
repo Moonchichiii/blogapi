@@ -1,4 +1,5 @@
 import logging
+from django.db.models import OuterRef, Subquery
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from rest_framework import generics
@@ -8,6 +9,7 @@ from rest_framework.pagination import PageNumberPagination
 
 from .models import Profile
 from .serializers import ProfileSerializer
+from popularity.models import PopularityMetrics
 from backend.permissions import IsOwnerOrReadOnly
 
 CACHE_TIMEOUT = 60 * 30
@@ -30,8 +32,10 @@ class ProfileList(generics.ListAPIView):
     pagination_class = CustomPagination
 
     def get_queryset(self):
-        """Return profiles ordered by popularity score."""
-        return Profile.objects.order_by("-popularity_score").select_related("user")
+        popularity_subquery = PopularityMetrics.objects.filter(user=OuterRef('user')).values('popularity_score')
+        return Profile.objects.annotate(
+            popularity_score=Subquery(popularity_subquery)
+        ).order_by('-popularity_score')
 
     @method_decorator(cache_page(CACHE_TIMEOUT))
     def list(self, request, *args, **kwargs):
