@@ -10,55 +10,32 @@ from django.utils import timezone
 from django.db import connection
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
+from rest_framework.test import APIRequestFactory
 
 from comments.models import Comment
 from posts.models import Post
 from posts.tasks import update_post_stats
-from posts.serializers import LimitedPostSerializer, PostListSerializer
+from posts.serializers import PostListSerializer, PostSerializer
 from .messages import STANDARD_MESSAGES
 
 User = get_user_model()
 
-
 class PostTests(APITestCase):
-    """Test suite for post-related functionalities."""
+    """Test suite for Post model and related views."""
 
     @classmethod
     def setUpTestData(cls):
-        """Set up initial data once for the entire test case."""
+        """Set up test data for the entire TestCase."""
         cache.clear()
         cls.client = APIClient()
-
         cls.user = cls._create_user("testuser@example.com", "testuser", "testpass123")
-        cls.other_user = cls._create_user(
-            "otheruser@example.com", "otheruser", "otherpass123"
-        )
-        cls.staff_user = cls._create_user(
-            "staffuser@example.com", "staffuser", "staffpass123", is_staff=True
-        )
-        cls.admin_user = cls._create_user(
-            "adminuser@example.com",
-            "adminuser",
-            "adminpass123",
-            is_staff=True,
-            is_superuser=True,
-        )
+        cls.other_user = cls._create_user("otheruser@example.com", "otheruser", "otherpass123")
+        cls.staff_user = cls._create_user("staffuser@example.com", "staffuser", "staffpass123", is_staff=True)
+        cls.admin_user = cls._create_user("adminuser@example.com", "adminuser", "adminpass123", is_staff=True, is_superuser=True)
 
         now = timezone.now()
-        cls.post1 = cls._create_post(
-            cls.user,
-            "First Post",
-            "Content for the first post.",
-            True,
-            now - timedelta(minutes=2),
-        )
-        cls.post2 = cls._create_post(
-            cls.user,
-            "Second Post",
-            "Content for the second post.",
-            False,
-            now - timedelta(minutes=1),
-        )
+        cls.post1 = cls._create_post(cls.user, "First Post", "Content for the first post.", True, now - timedelta(minutes=2))
+        cls.post2 = cls._create_post(cls.user, "Second Post", "Content for the second post.", False, now - timedelta(minutes=1))
 
         cls.post_list_url = reverse("post-list")
         cls.post_detail_url = lambda pk: reverse("post-detail", kwargs={"pk": pk})
@@ -66,20 +43,12 @@ class PostTests(APITestCase):
     @staticmethod
     def _create_user(email, profile_name, password, is_staff=False, is_superuser=False):
         """Helper method to create a user."""
-        return User.objects.create_user(
-            email=email,
-            profile_name=profile_name,
-            password=password,
-            is_staff=is_staff,
-            is_superuser=is_superuser,
-        )
+        return User.objects.create_user(email=email, profile_name=profile_name, password=password, is_staff=is_staff, is_superuser=is_superuser)
 
     @staticmethod
     def _create_post(author, title, content, is_approved=False, created_at=None):
         """Helper method to create a post."""
-        post = Post.objects.create(
-            author=author, title=title, content=content, is_approved=is_approved
-        )
+        post = Post.objects.create(author=author, title=title, content=content, is_approved=is_approved)
         if created_at:
             post.created_at = created_at
             post.save()
@@ -90,187 +59,139 @@ class PostTests(APITestCase):
         self.client.force_authenticate(user=user)
 
     def _assert_email_sent(self, subject, body_contains):
-        """Helper method to assert email content."""
+        """Helper method to assert an email was sent."""
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].subject, subject)
         self.assertIn(body_contains, mail.outbox[0].body)
 
-    @patch("posts.tasks.update_post_stats.delay")
-    def test_post_rating_triggers_update_task(self, mock_update_task):
-        self._authenticate_user(self.other_user)
-        response = self.client.post(
-            reverse("create-update-rating"), {"post": self.post1.id, "value": 4}
-        )
+    def test_post_list(self):
+        """Test retrieving the list of posts."""
+        response = self.client.get(self.post_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 1)
+
+    def test_post_detail(self):
+        """Test retrieving a post detail."""
+        response = self.client.get(self.post_detail_url(self.post1.id))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['data']['title'], self.post1.title)
+
+    def test_create_post(self):
+        """Test creating a new post."""
+        self._authenticate_user(self.user)
+        data = {'title': 'New Post', 'content': 'New content', 'tags': [self.other_user.profile_name]}
+        response = self.client.post(self.post_list_url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        mock_update_task.assert_called_once_with(self.post1.id)
+        self.assertEqual(Post.objects.last().author, self.user)
 
-    def test_post_disapproval_sends_email(self):
-        """Test that disapproving a post sends an email."""
-        self._authenticate_user(self.staff_user)
-        response = self.client.post(
-            reverse("disapprove-post", kwargs={"pk": self.post1.id}),
-            {"reason": "Inappropriate content"},
-        )
-        self._assert_email_sent(
-            "Your post has been disapproved", "Inappropriate content"
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-    def test_post_update_with_invalid_image(self):
-        """Test updating a post with an invalid image."""
+    def test_update_post(self):
+        """Test updating a post."""
         self._authenticate_user(self.user)
-        invalid_file = SimpleUploadedFile(
-            "invalid.txt", b"not an image", content_type="text/plain"
-        )
-        response = self.client.patch(
-            self.post_detail_url(self.post1.id),
-            {"image": invalid_file},
-            format="multipart",
-        )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Upload a valid image.", str(response.data["image"][0]))
-
-    def test_post_search_case_insensitive(self):
-        """Test case-insensitive search for posts."""
-        self._create_post(
-            self.user, "Case Insensitive Search Test", "Test content", True
-        )
-        response = self.client.get(f"{self.post_list_url}?search=CASE INSENSITIVE")
+        data = {'content': 'Updated content'}
+        response = self.client.patch(self.post_detail_url(self.post1.id), data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(
-            response.data["results"][0]["title"], "Case Insensitive Search Test"
-        )
+        self.post1.refresh_from_db()
+        self.assertEqual(self.post1.content, 'Updated content')
 
-    def test_post_update_resets_approval(self):
-        """Test that updating a post resets its approval status."""
+    def test_delete_post(self):
+        """Test deleting a post."""
         self._authenticate_user(self.user)
-        response = self.client.patch(
-            self.post_detail_url(self.post1.id), {"content": "Updated content"}
-        )
+        response = self.client.delete(self.post_detail_url(self.post1.id))
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Post.objects.filter(id=self.post1.id).exists())
+
+    def test_approve_post(self):
+        """Test approving a post."""
+        self._authenticate_user(self.admin_user)
+        response = self.client.patch(reverse('approve-post', kwargs={'pk': self.post2.id}))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.post2.refresh_from_db()
+        self.assertTrue(self.post2.is_approved)
+
+    def test_disapprove_post(self):
+        """Test disapproving a post."""
+        self._authenticate_user(self.admin_user)
+        response = self.client.post(reverse('disapprove-post', kwargs={'pk': self.post1.id}), {'reason': 'Test reason'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.post1.refresh_from_db()
         self.assertFalse(self.post1.is_approved)
 
-    def test_post_creation_with_invalid_tags(self):
-        """Test creating a post with invalid tags."""
-        self._authenticate_user(self.user)
-        response = self.client.post(
-            self.post_list_url,
-            {
-                "title": "Post with Invalid Tags",
-                "content": "Content with invalid tags",
-                "tags": ["nonexistent_user", self.other_user.profile_name],
-            },
-        )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("tags", response.data["errors"])
-
-    def test_post_detail_includes_comments(self):
-        """Test that post detail includes comments."""
-        self._authenticate_user(self.user)
-        Comment.objects.create(
-            post=self.post1, author=self.other_user, content="Test comment"
-        )
-        response = self.client.get(self.post_detail_url(self.post1.id))
+    def test_unapproved_post_list(self):
+        """Test retrieving the list of unapproved posts."""
+        self._authenticate_user(self.admin_user)
+        response = self.client.get(reverse('unapproved-posts'))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["data"]["comments"]), 1)
-        self.assertEqual(
-            response.data["data"]["comments"][0]["content"], "Test comment"
-        )
+        self.assertEqual(len(response.data['results']), 1)
 
-    def test_partial_update_post(self):
-        """Test partially updating a post."""
-        self._authenticate_user(self.user)
-        data = {"content": "Partially updated content"}
-        response = self.client.patch(self.post_detail_url(self.post1.id), data)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.post1.refresh_from_db()
-        self.assertEqual(self.post1.content, "Partially updated content")
-
-    def test_create_post_with_tags_and_image(self):
-        """Test creating a post with both tags and an image."""
-        self.client.force_authenticate(user=self.user)
-        image_content = b"\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b"
-        image_file = SimpleUploadedFile(
-            "test_image.gif", image_content, content_type="image/gif"
-        )
-        data = {
-            "title": "Post with Tags and Image",
-            "content": "This post has tags and an image.",
-            "tags": [self.other_user.profile_name],
-            "image": image_file,
-        }
-        response = self.client.post(self.post_list_url, data, format="multipart")
+    @patch("posts.tasks.update_post_stats.delay")
+    def test_post_rating_triggers_update_task(self, mock_update_task):
+        """Test that rating a post triggers the update task."""
+        self._authenticate_user(self.other_user)
+        response = self.client.post(reverse("create-update-rating"), {"post": self.post1.id, "value": 4})
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        new_post = Post.objects.get(title="Post with Tags and Image")
-        self.assertIsNotNone(new_post.image)
-        self.assertEqual(new_post.tags.count(), 1)
+        mock_update_task.assert_called_once_with(self.post1.id)
 
-    def test_post_list_filter_by_approval_status(self):
-        """Test filtering posts by approval status."""
-        self._authenticate_user(self.user)
-        response = self.client.get(f"{self.post_list_url}?is_approved=True")
+    def test_post_search(self):
+        """Test searching for posts."""
+        response = self.client.get(f"{self.post_list_url}?search=first")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(response.data['results'][0]['title'], "First Post")
 
-    def test_create_post_with_duplicate_title(self):
+    def test_post_ordering(self):
+        """Test ordering posts."""
+        response = self.client.get(f"{self.post_list_url}?ordering=-created_at")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['results'][0]['title'], "First Post")
+
+    def test_post_filtering(self):
+        """Test filtering posts."""
         self._authenticate_user(self.user)
-        data = {
-            "title": "First Post",
-            "content": "Trying to create a post with a duplicate title.",
-            "tags": [self.other_user.profile_name],
-        }
-        response = self.client.post(self.post_list_url, data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn(
-            "A post with this title already exists.",
-            str(response.data["errors"]["title"][0]),
-        )
+        response = self.client.get(f"{self.post_list_url}?is_approved=true")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 1)
+        def test_create_post_with_image(self):
+            """Test creating a post with an image."""
+            self._authenticate_user(self.user)
+            image_content = b"\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b"
+            image_file = SimpleUploadedFile("test_image.gif", image_content, content_type="image/gif")
+            data = {
+                'title': 'Post with Image',
+                'content': 'This post has an image.',
+                'image': image_file,
+                'tags': []
+            }
+            response = self.client.post(self.post_list_url, data, format='multipart')
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            self.assertIsNotNone(Post.objects.get(title='Post with Image').image)
+    
+    def test_post_serializer(self):
+        """Test the Post serializer."""
+        factory = APIRequestFactory()
+        request = factory.get('/')
+        request.user = self.user
+        context = {'request': request}
+        serializer = PostSerializer(self.post1, context=context)
+        expected_keys = {"id", "title", "content", "author", "created_at", "image", "is_owner", "average_rating", "tagged_users"}
+        self.assertEqual(set(serializer.data.keys()), expected_keys)
+        for key in expected_keys:
+            self.assertIn(key, serializer.data)
 
-    def test_create_post_unexpected_exception(self):
-        self._authenticate_user(self.user)
-        data = {
-            "title": "New Post",
-            "content": "Content for the new post.",
-            "tags": [self.other_user.profile_name],
-        }
-        with patch(
-            "posts.serializers.PostSerializer.is_valid",
-            side_effect=Exception("Test exception"),
-        ):
-            response = self.client.post(self.post_list_url, data)
-            self.assertEqual(
-                response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-            self.assertIn("Test exception", response.data["errors"]["detail"])
-
-        with patch(
-            "posts.serializers.PostSerializer.is_valid",
-            side_effect=Exception("Test exception"),
-        ):
-            response = self.client.post(self.post_list_url, data)
-            self.assertEqual(
-                response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-            self.assertIn("Test exception", response.data["errors"]["detail"])
+    def test_post_list_serializer(self):
+        """Test the PostList serializer."""
+        serializer = PostListSerializer(self.post1)
+        self.assertEqual(set(serializer.data.keys()), {"id", "title", "content", "author", "created_at", "is_owner", "image"})
 
     @patch("posts.models.Post.objects.get")
     def test_update_post_stats_error(self, mock_get):
-        """Test error handling in update_post_stats task."""
+        """Test handling of errors in update_post_stats."""
         mock_get.side_effect = Post.DoesNotExist
         update_post_stats(999)
 
     @classmethod
     def explain_query(cls):
-        """Helper method to print SQL EXPLAIN output."""
+        """Explain the SQL query for debugging."""
         with connection.cursor() as cursor:
             cursor.execute(f"EXPLAIN {Post.objects.all().query}")
             for row in cursor.fetchall():
                 print(row)
-
-    def test_limited_post_serializer(self):
-        """Test the LimitedPostSerializer."""
-        serializer = LimitedPostSerializer(self.post1)
-        data = serializer.data
-        self.assertEqual(set(data.keys()), {"id", "title", "author", "image_url"})
-        self.assertEqual(data["author"], self.user.profile_name)

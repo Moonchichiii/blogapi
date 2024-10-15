@@ -1,84 +1,57 @@
 from rest_framework import generics, permissions, status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from django.shortcuts import get_object_or_404
 from posts.models import Post
 from .models import Comment
 from .serializers import CommentSerializer
-
+from backend.permissions import IsOwnerOrReadOnly
 
 class CommentPagination(PageNumberPagination):
-    """Pagination settings for comments."""
-
     page_size = 10
     page_size_query_param = "page_size"
     max_page_size = 100
 
-
 class CommentList(generics.ListCreateAPIView):
-    """List and create comments for a specific post."""
-
     serializer_class = CommentSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     pagination_class = CommentPagination
 
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated()]
+        return [permissions.AllowAny()]
+
     def get_queryset(self):
-        """Return comments for the specified post."""
-        return Comment.objects.filter(post=self.kwargs["post_id"]).select_related(
-            "author"
-        )
+        return Comment.objects.filter(post_id=self.kwargs["post_id"], is_approved=True).select_related("author")
 
     def perform_create(self, serializer):
-        """Save the comment with the current user as the author."""
-        try:
-            post = Post.objects.get(pk=self.kwargs["post_id"])
-            serializer.save(author=self.request.user, post=post)
-            return Response(
-                {"message": "Comment created successfully.", "type": "success"},
-                status=status.HTTP_201_CREATED,
-            )
-        except Post.DoesNotExist:
-            return Response(
-                {"message": "Post not found.", "type": "error"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        post = get_object_or_404(Post, pk=self.kwargs["post_id"])
+        serializer.save(author=self.request.user, post=post)
 
+    def create(self, request, *args, **kwargs):
+        post = get_object_or_404(Post, pk=self.kwargs["post_id"])
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 class CommentDetail(generics.RetrieveUpdateDestroyAPIView):
-    """Retrieve, update, or delete a comment."""
-
     queryset = Comment.objects.select_related("author", "post")
     serializer_class = CommentSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
+    permission_classes = [IsOwnerOrReadOnly]
 
 class ModerateComment(generics.UpdateAPIView):
-    """Approve or disapprove a comment."""
-
     queryset = Comment.objects.all()
     serializer_class = CommentSerializer
     permission_classes = [IsAdminUser]
 
     def update(self, request, *args, **kwargs):
-        """Update the approval status of a comment."""
         instance = self.get_object()
         action = request.data.get("action")
-        if action == "approve":
-            instance.is_approved = True
+        if action in ["approve", "disapprove"]:
+            instance.is_approved = (action == "approve")
             instance.save()
-            return Response(
-                {"message": "Comment approved successfully.", "type": "success"},
-                status=status.HTTP_200_OK,
-            )
-        elif action == "disapprove":
-            instance.is_approved = False
-            instance.save()
-            return Response(
-                {"message": "Comment disapproved successfully.", "type": "success"},
-                status=status.HTTP_200_OK,
-            )
-        else:
-            return Response(
-                {"message": "Invalid action provided.", "type": "error"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"status": f"Comment {action}d successfully"})
+        return Response({"error": "Invalid action provided"}, status=status.HTTP_400_BAD_REQUEST)

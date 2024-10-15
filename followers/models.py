@@ -1,8 +1,8 @@
-from django.conf import settings
 from django.db import models
-
+from django.conf import settings
 
 class Follow(models.Model):
+    """Model representing a follow relationship between users."""
     follower = models.ForeignKey(
         settings.AUTH_USER_MODEL, related_name="following", on_delete=models.CASCADE
     )
@@ -16,7 +16,7 @@ class Follow(models.Model):
         indexes = [
             models.Index(fields=["follower"]),
             models.Index(fields=["followed"]),
-            models.Index(fields=["created_at"]),  # Added indexing for `created_at`
+            models.Index(fields=["created_at"]),
         ]
 
     def __str__(self):

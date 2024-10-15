@@ -1,21 +1,17 @@
 from django.conf import settings
 from django.db import models
-from django.utils.translation import gettext_lazy as _
 from cloudinary.models import CloudinaryField
 from django.db.models import Avg, Count
 from tags.models import ProfileTag
 
-
 class Post(models.Model):
-    """
-    Model representing a post made by a user.
-    """
+    """Represents a user's post."""
 
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="posts",
-        db_index=True,
+        db_index=True
     )
     title = models.CharField(max_length=200, db_index=True)
     content = models.TextField()
@@ -37,11 +33,10 @@ class Post(models.Model):
     is_approved = models.BooleanField(default=False, db_index=True)
     average_rating = models.FloatField(default=0)
     total_ratings = models.PositiveIntegerField(default=0)
-
-    # Add this many-to-many field for tags
     tags = models.ManyToManyField(ProfileTag, related_name="posts", blank=True)
 
     def update_rating_statistics(self):
+        """Updates average rating and total number of ratings."""
         rating_stats = self.ratings.aggregate(
             avg_rating=Avg("value"), total_ratings=Count("id")
         )
@@ -50,9 +45,7 @@ class Post(models.Model):
         self.save(update_fields=["average_rating", "total_ratings"])
 
     def __str__(self):
-        """
-        Return a string representation of the post.
-        """
+        """Returns a string representation of the post."""
         return f"Post by {self.author.profile_name}: {self.title}"
 
     class Meta:

@@ -71,13 +71,12 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    """Serializer for CustomUser model."""
-
     profile = ProfileSerializer(read_only=True)
 
     class Meta:
         model = CustomUser
         fields = ("id", "email", "profile_name", "profile")
+        read_only_fields = ("id", "profile_name")
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

@@ -37,3 +37,5 @@ def create_rating_notification(sender, instance, created, **kwargs):
             f"{instance.user.profile_name} rated your post '{instance.post.title}'."
         )
         send_notification_task.delay(instance.post.author.id, "Rating", message)
+
+

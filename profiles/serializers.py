@@ -8,6 +8,7 @@ User = get_user_model()
 
 
 class ProfileSerializer(serializers.ModelSerializer):
+    profile_name = serializers.CharField(source='user.profile_name', read_only=True)
     image = CloudinaryFileField(
         options={
             "folder": "profiles",
