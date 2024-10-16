@@ -9,6 +9,32 @@ import cloudinary
 from cloudinary.utils import cloudinary_url
 from celery.schedules import crontab
 
+
+# import logging
+# logging.basicConfig(level=logging.INFO)
+
+
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'handlers': {
+#         'console': {
+#             'class': 'logging.StreamHandler',
+#             'level': 'DEBUG',
+#         },
+#     },
+#     'loggers': {
+#         'popularity.tasks': {
+#             'handlers': ['console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#     },
+# }
+
+
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Security Settings
@@ -73,26 +99,7 @@ LOGIN_URL = "two_factor:login"
 LOGIN_REDIRECT_URL = "two_factor:profile"
 TWO_FACTOR_PATCH_ADMIN = True
 
-# Cache Configuration (Redis for production)
 
-CACHES = (
-    {
-        "default": {
-            "BACKEND": "django_redis.cache.RedisCache",
-            "LOCATION": "redis://127.0.0.1:6379/1",
-            "OPTIONS": {
-                "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            },
-        }
-    }
-    if not DEBUG
-    else {
-        "default": {
-            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "unique-snowflake",
-        }
-    }
-)
 
 # Password Validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -186,8 +193,16 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # Celery settings
+
 CELERY_BROKER_URL = 'redis://localhost:6379/1'
 CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60
+CELERY_TIMEZONE = 'UTC'
+CELERY_TASK_ALWAYS_EAGER = False
 
 CELERY_BEAT_SCHEDULE = {
     "update-popularity-scores": {
@@ -195,6 +210,26 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=0, minute=0), 
     },
 }
+
+# Cache Configuration (Redis for production)
+CACHES = (
+    {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": "redis://127.0.0.1:6379/1",
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            },
+        }
+    }
+    if not DEBUG
+    else {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "unique-snowflake",
+        }
+    }
+)
 
 
 # REST Framework Settings
@@ -265,3 +300,5 @@ if not DEBUG:
     X_FRAME_OPTIONS = "DENY"
     CSRF_COOKIE_SECURE = True
     SESSION_COOKIE_SECURE = True
+
+

@@ -1,5 +1,5 @@
 import unittest
-from unittest import mock
+from unittest.mock import patch
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
@@ -8,9 +8,7 @@ from django.contrib.auth import get_user_model
 from profiles.models import Profile
 from followers.models import Follow
 from popularity.models import PopularityMetrics
-from unittest.mock import patch
-
-
+from .tasks import update_all_popularity_scores
 
 User = get_user_model()
 
@@ -21,9 +19,10 @@ class ProfileListViewTests(TestCase):
         self.user2 = User.objects.create_user(email='user2@example.com', profile_name='user2', password='pass')
         self.user3 = User.objects.create_user(email='user3@example.com', profile_name='user3', password='pass')
         
-        PopularityMetrics.objects.create(user=self.user1, popularity_score=50)
-        PopularityMetrics.objects.create(user=self.user2, popularity_score=75)
-        PopularityMetrics.objects.create(user=self.user3, popularity_score=25)
+        # Update popularity scores
+        PopularityMetrics.objects.filter(user=self.user1).update(popularity_score=50)
+        PopularityMetrics.objects.filter(user=self.user2).update(popularity_score=75)
+        PopularityMetrics.objects.filter(user=self.user3).update(popularity_score=25)
         
         Follow.objects.create(follower=self.user1, followed=self.user2)
         
@@ -51,7 +50,7 @@ class ProfileListViewTests(TestCase):
         self.client.force_authenticate(user=self.user1)
         response = self.client.get(self.profile_list_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 10)  # Default page size
+        self.assertEqual(len(response.data['results']), 10)
         self.assertIsNotNone(response.data['next'])
         self.assertIsNone(response.data['previous'])
 
@@ -95,16 +94,14 @@ class ProfileDetailViewTests(TestCase):
         response = self.client.patch(self.profile_detail_url, data)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-from unittest.mock import patch
-
 class ProfileTaskTests(TestCase):
     @patch('profiles.tasks.aggregate_popularity_score.delay')
     def test_update_all_popularity_scores(self, mock_aggregate_task):
         user1 = User.objects.create_user(email='user1@example.com', profile_name='user1', password='pass')
         user2 = User.objects.create_user(email='user2@example.com', profile_name='user2', password='pass')
-        
+       
         result = update_all_popularity_scores()
-        
+       
         self.assertEqual(result, f"Initiated popularity score updates for {Profile.objects.count()} profiles")
         self.assertEqual(mock_aggregate_task.call_count, 2)
         mock_aggregate_task.assert_any_call(user1.id)
@@ -115,11 +112,12 @@ class ProfileSignalTests(TestCase):
         user = User.objects.create_user(email='newuser@example.com', profile_name='newuser', password='pass')
         self.assertTrue(hasattr(user, 'profile'))
         self.assertIsInstance(user.profile, Profile)
+        self.assertTrue(PopularityMetrics.objects.filter(user=user).exists())
 
     def test_follow_count_update_on_follow_creation(self):
         user1 = User.objects.create_user(email='user1@example.com', profile_name='user1', password='pass')
         user2 = User.objects.create_user(email='user2@example.com', profile_name='user2', password='pass')
-        
+       
         Follow.objects.create(follower=user1, followed=user2)
         user2.profile.refresh_from_db()
         self.assertEqual(user2.profile.follower_count, 1)
@@ -127,7 +125,7 @@ class ProfileSignalTests(TestCase):
     def test_follow_count_update_on_follow_deletion(self):
         user1 = User.objects.create_user(email='user1@example.com', profile_name='user1', password='pass')
         user2 = User.objects.create_user(email='user2@example.com', profile_name='user2', password='pass')
-        
+       
         follow = Follow.objects.create(follower=user1, followed=user2)
         follow.delete()
         user2.profile.refresh_from_db()

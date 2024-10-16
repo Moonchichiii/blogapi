@@ -4,5 +4,7 @@ from .models import Post
 from popularity.tasks import aggregate_popularity_score
 
 @receiver(post_save, sender=Post)
-def update_popularity_on_post_change(sender, instance, **kwargs):
-    aggregate_popularity_score.delay(instance.author.id)
+def update_popularity_on_post_change(sender, instance, created, **kwargs):
+    """Trigger popularity score update when post statistics are updated."""
+    if created:  # Only trigger the task when a new post is created
+        aggregate_popularity_score.delay(instance.author.id)

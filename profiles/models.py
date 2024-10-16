@@ -2,13 +2,8 @@ from django.conf import settings
 from django.db import models
 from cloudinary.models import CloudinaryField
 
-
 class Profile(models.Model):
-    """User profile model."""
-
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile"
-    )
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
     bio = models.TextField(max_length=500, blank=True)
     image = CloudinaryField(
         "image",

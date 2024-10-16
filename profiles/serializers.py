@@ -7,7 +7,6 @@ from backend.utils import validate_image
 
 User = get_user_model()
 
-
 class ProfileSerializer(serializers.ModelSerializer):
     profile_name = serializers.CharField(source='user.profile_name', read_only=True)
     popularity_score = serializers.SerializerMethodField()
@@ -43,7 +42,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "follower_count",
             "following_count",
         ]
-        
+    
     def get_popularity_score(self, obj):
         try:
             return obj.user.popularity_metrics.popularity_score
@@ -51,7 +50,6 @@ class ProfileSerializer(serializers.ModelSerializer):
             return 0.0
 
     def validate_image(self, value):
-        """Validate the uploaded image."""
         return validate_image(value)
 
     def update(self, instance, validated_data):
@@ -60,5 +58,3 @@ class ProfileSerializer(serializers.ModelSerializer):
             instance.image = validated_data["image"]
         instance.save()
         return instance
-    
-    

@@ -1,9 +1,8 @@
 from django.apps import AppConfig
 
-
 class ProfilesConfig(AppConfig):
-    name = "profiles"
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'profiles'
 
     def ready(self):
-        # Import signal handlers to register them
         import profiles.signals

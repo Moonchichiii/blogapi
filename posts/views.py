@@ -1,4 +1,5 @@
 import logging
+from django.core.cache import cache
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from django.core.mail import send_mail
@@ -20,7 +21,7 @@ from .messages import STANDARD_MESSAGES
 logger = logging.getLogger(__name__)
 
 CACHE_TIMEOUT_LONG = 60 * 15
-DEFAULT_PAGE_SIZE = 10
+DEFAULT_PAGE_SIZE = 5
 MAX_PAGE_SIZE = 100
 
 class PostCursorPagination(PageNumberPagination):
@@ -30,7 +31,7 @@ class PostCursorPagination(PageNumberPagination):
     max_page_size = MAX_PAGE_SIZE
 
 class PostList(generics.ListCreateAPIView):
-    """List and create posts."""
+    serializer_class = PostListSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     pagination_class = PostCursorPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -38,13 +39,9 @@ class PostList(generics.ListCreateAPIView):
     search_fields = ["title", "content", "author__profile_name"]
     ordering_fields = ["created_at", "updated_at"]
     ordering = ["-created_at"]
-
-    def get_serializer_class(self):
-        """Return appropriate serializer based on authentication status."""
-        return PostSerializer if self.request.user.is_authenticated else PostListSerializer
+    throttle_classes = [] 
 
     def get_queryset(self):
-        """Return posts based on user permissions and search filters."""
         user = self.request.user
         queryset = Post.objects.select_related("author").prefetch_related("tags", "ratings")
         if user.is_authenticated and not user.is_superuser and not user.is_staff:
