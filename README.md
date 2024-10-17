@@ -10,7 +10,7 @@
 BlogClient Backend is the powerhouse behind a dynamic social media blogging platform. Built with Django and DRF, it offers robust features for a seamless blogging experience.
 
 ### 🔑 Key Features
-- Secure JWT-based authentication with email verification
+- Secure JWT-based authentication with email verification & 2FA authentication.
 - Post creation, commenting, and user tagging
 - Rating system for posts
 - Follow system and content discovery

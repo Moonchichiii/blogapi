@@ -9,6 +9,7 @@ from .views import (
     ResendVerificationEmailView,
     UpdateEmailView,
     SetupTwoFactorView,
+    TwoFactorVerifyView,
     AccountDeletionView,
     CustomTokenRefreshView,
 )
@@ -53,6 +54,7 @@ urlpatterns = [
         name="resend_verification",
     ),
     path("setup-2fa/", SetupTwoFactorView.as_view(), name="setup_2fa"),
+    path("verify-2fa/", TwoFactorVerifyView.as_view(), name="verify_2fa"),
     path("update-email/", UpdateEmailView.as_view(), name="update_email"),
     path("delete-account/", AccountDeletionView.as_view(), name="delete_account"),
 ]
