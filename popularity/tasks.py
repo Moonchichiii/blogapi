@@ -41,7 +41,7 @@ def aggregate_popularity_score(user_id):
             metrics.popularity_score = (
                 (metrics.average_post_rating * 0.6) +
                 (metrics.post_count * 0.3) +
-                (metrics.follower_count * 0.1)  # Adjusted weight for follower count
+                (metrics.follower_count * 0.1)  
             )
             metrics.save()
 

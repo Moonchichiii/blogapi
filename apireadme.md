@@ -1,73 +1,91 @@
-# BlogClient Backend API Structure and Versioning
+BlogClient Backend API Documentation
+API Structure and Endpoints
+BlogClient Backend API uses a RESTful structure. All API endpoints are accessible under the /api/ path.
+Accounts
 
-## Current API Structure
+POST /api/accounts/register/: Register a new user
+POST /api/accounts/login/: Log in a user
+POST /api/accounts/logout/: Log out a user
+GET /api/accounts/current-user/: Get current user details
+PATCH /api/accounts/update-email/: Update user email
+POST /api/accounts/delete-account/: Delete user account
 
-Our BlogClient Backend API currently uses a single, unversioned structure. All API endpoints are accessible under the `/api/` path.
+Profiles
 
-### Example Endpoints:
+GET /api/profiles/: List all profiles
+GET /api/profiles/<int:user_id>/: Get a specific profile
+PATCH /api/profiles/<int:user_id>/: Update a profile
 
-- `/api/accounts/register/`
-- `/api/posts/`
-- `/api/profiles/`
+Posts
 
-## API Versioning
+GET /api/posts/: List all posts
+POST /api/posts/: Create a new post
+GET /api/posts/<int:pk>/: Get a specific post
+PATCH /api/posts/<int:pk>/: Update a post
+DELETE /api/posts/<int:pk>/: Delete a post
 
-At present, our API does not implement explicit versioning. This means:
+Comments
 
-1. All clients interact with the same, current version of the API.
-2. Any changes to the API will affect all users simultaneously.
-3. There's no built-in mechanism for supporting multiple API versions concurrently.
+GET /api/posts/<int:post_id>/comments/: List comments for a post
+POST /api/posts/<int:post_id>/comments/: Create a comment on a post
+PATCH /api/comments/<int:pk>/: Update a comment
+DELETE /api/comments/<int:pk>/: Delete a comment
 
-### Implications
+Ratings
 
-- **Simplicity**: The current structure is straightforward and easy to understand.
-- **Maintenance**: Only one version of the API needs to be maintained.
-- **Flexibility**: Changes can be rolled out quickly to all users.
-- **Potential Disruption**: Significant changes could potentially break existing integrations.
+POST /api/rate/: Create or update a rating for a post
 
-## Future Considerations
+Tags
 
-As our API evolves, we may consider implementing versioning to provide a smoother transition for API consumers when introducing breaking changes. Potential versioning strategies include:
+POST /api/tags/create/: Create a new tag
 
-1. **URL Versioning**
-   - Example: `/api/v1/accounts/register/`
-   - Pros: Clear and easy to understand
-   - Cons: Can lead to URL pollution
+Followers
 
-2. **Header Versioning**
-   - Example: `API-Version: 1.0` in request headers
-   - Pros: Keeps URLs clean
-   - Cons: Less visible, may be overlooked
+POST /api/followers/follow/: Follow a user
+DELETE /api/followers/follow/: Unfollow a user
 
-3. **Accept Header Versioning**
-   - Example: `Accept: application/vnd.blogclient.v1+json`
-   - Pros: Follows HTTP conventions
-   - Cons: More complex to implement and use
+Notifications
 
-4. **Parameter Versioning**
-   - Example: `/api/accounts/register/?version=1.0`
-   - Pros: Easy to implement
-   - Cons: Can clutter URLs and query strings
+GET /api/notifications/: List notifications for the current user
+PATCH /api/notifications/<int:pk>/mark-read/: Mark a notification as read
+PATCH /api/notifications/mark-all-read/: Mark all notifications as read
+DELETE /api/notifications/<int:pk>/delete/: Delete a notification
 
-### Benefits of Versioning
+Authentication
+The API uses JWT (JSON Web Tokens) for authentication. Include the token in the Authorization header of your requests:
+Authorization: Bearer <your_token_here>
+Rate Limiting
+The API implements rate limiting to prevent abuse. Current limits are:
 
-- Allows for breaking changes without affecting existing users
-- Provides a transition period for clients to update their integrations
-- Maintains backward compatibility for older integrations
+Anonymous users: 100 requests per day
+Authenticated users: 1000 requests per day
+Authentication attempts: 5 per minute
 
-## Moving Forward
+Pagination
+List endpoints use pagination with a default page size of 10. You can specify a different page size using the page_size query parameter, up to a maximum of 100.
+Filtering and Ordering
+Many list endpoints support filtering and ordering. Check individual endpoint documentation for supported parameters.
+Error Handling
+The API returns appropriate HTTP status codes along with error messages in the response body for easier debugging.
+Testing
+Our API is extensively tested with 96% coverage. The test suite includes:
 
-For now, developers should be aware that they are working with the current, unversioned API. Any significant changes will be communicated clearly to all API consumers.
+Unit tests for models, serializers, and views
+Integration tests for API endpoints
+Tests for authentication and permissions
+Tests for complex logic (e.g., popularity calculations)
 
-If you're integrating with our API, please ensure you have a process in place to adapt to potential changes in the API structure or functionality.
+To run the test suite:
+python manage.py test
 
-We welcome feedback on our API structure and potential future versioning strategies. Please open an issue in our repository if you have suggestions or concerns.
+For a detailed coverage report:
+coverage run --source='.' manage.py test
+coverage report
 
-## Additional Resources
+Versioning
+Currently, the API does not use explicit versioning. Any significant changes will be communicated to API consumers well in advance.
 
-- [API Documentation](link-to-your-api-documentation)
-- [Changelog](link-to-your-changelog)
-- [Support Contact](link-to-support-contact)
+Support
+For any questions or issues, please open an issue in the GitHub repository.
 
----
-
+Last updated: [2024-10-17]

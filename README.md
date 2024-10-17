@@ -1,4 +1,4 @@
-# 🚀 BlogClient Backend: Powering Your Social Blogging Platform
+# 🚀 BlogClient Backend: Powering the Social Blogging Platform
 
 ## 🌟 Quick Links
 - [Live Project]() (Coming Soon!)
@@ -10,12 +10,15 @@
 BlogClient Backend is the powerhouse behind a dynamic social media blogging platform. Built with Django and DRF, it offers robust features for a seamless blogging experience.
 
 ### 🔑 Key Features
-- Secure JWT-based authentication with 2FA
+- Secure JWT-based authentication with email verification
 - Post creation, commenting, and user tagging
+- Rating system for posts
 - Follow system and content discovery
 - High-level security measures
 - Efficient caching strategies
 - Admin tools for content moderation
+- Popularity metrics for users and posts
+- Notification system
 
 ## 🏗️ Application Structure
 
@@ -29,11 +32,13 @@ blogclient_backend/
 ├── ratings/
 ├── tags/
 ├── followers/
+├── notifications/
+├── popularity/
 │
-├── blogclient_backend/
+├── backend/
 │   ├── settings.py
 │   ├── urls.py
-│   └── wsgi.py
+│   └── celery.py
 │
 ├── static/
 ├── media/
@@ -43,35 +48,22 @@ blogclient_backend/
 └── README.md
 ```
 
-## 📊 Class Diagram
-
-![Class Diagram](readmecontent/classdiagram.png)
-
-
 ## 🛠️ Tech Stack
 - Django & Django REST Framework
-- PostgreSQL
-- JWT & Two-Factor Authentication
-- Redis for caching
+- SQLite (for development, can be easily switched to PostgreSQL for production)
+- JWT Authentication
+- Redis for caching and Celery tasks
 - Cloudinary for media storage
+- Celery for asynchronous tasks
 
 ## 📦 Key Dependencies
-- Django (5.0.6)
-- Django REST Framework (3.14.0)
-- Django Allauth (0.61.1)
-- Django Cloudinary Storage (0.3.0)
-- Django CORS Headers (4.3.1)
-- Django Filter (24.2)
-- Django REST Framework SimpleJWT (5.3.1)
-- DJ Rest Auth (2.2.7)
-- Gunicorn (22.0.0)
-- OpenAI (1.35.10)
-- Pillow (10.3.0)
-- Psycopg2-binary (2.9.9)
-- Whitenoise (6.7.0)
-- Django Ratelimit (4.1.0)
-- Django Two-Factor Auth
-- Django Redis
+- Django
+- Django REST Framework
+- Django REST Framework SimpleJWT
+- Cloudinary
+- Celery
+- Redis
+- Pillow
 
 ## 🚀 Quick Start
 1. Clone: `git clone https://github.com/yourusername/blogclient-backend.git`
@@ -80,40 +72,48 @@ blogclient_backend/
 4. Run: `python manage.py runserver`
 
 ## 🧪 Testing
-We take testing seriously to ensure reliability and performance. See our [testing guide](docs/testing_guide.md) for details on:
-- Unit and integration tests
-- Coverage reports
-- Performance testing with Locust
-- Security testing
+Project has an extensive test suite with 96% coverage. Key testing features include:
+
+- Comprehensive unit tests for all applications
+- Integration tests for API endpoints
+- Mocking of external services and tasks
+- Custom test cases for model methods and signals
+
+To run the tests:
+```
+python manage.py test
+```
+
+For a coverage report:
+```
+coverage run --source='.' manage.py test
+coverage report
+```
 
 ## 🔒 Security Features
-- Two-Factor Authentication (2FA)
-- JWT with short expiry and refresh tokens
-- Rate limiting to prevent abuse
+- Email verification for new accounts
+- JWT with access and refresh tokens
+- Password validation with custom requirements
 - CORS configuration
-- Content Security Policy (CSP)
-- HTTPS enforcement
+- Cloudinary secure URLs for media
 
 ## 📦 Deployment
-This project is designed to be deployed on Heroku. Before deploying, ensure you've configured your settings correctly:
+This project is designed to be deployed on a platform of your choice. Key considerations:
 
 1. Update `ALLOWED_HOSTS` in `settings.py`
-2. Configure environment variables (see [Deployment Guide](docs/deployment_guide.md))
+2. Configure environment variables
 3. Set `DEBUG = False` for production
-
-For a full deployment walkthrough, check our [Deployment Guide](docs/deployment_guide.md).
+4. Set up a production-ready database (e.g., PostgreSQL)
+5. Configure Celery and Redis for production
 
 ## 🔮 Future Enhancements
-- AI-powered chatbot using OpenAI API
-- Advanced analytics dashboard
-- Real-time notifications
+- Enhance the popularity algorithm
+- Implement more advanced caching strategies
 
-## 🤝 Contributing
-We welcome contributions! Please check our [contributing guidelines](CONTRIBUTING.md).
 
 ## 📜 License
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
 
 ---
 
-Built with ❤️ 
+Built with ❤️

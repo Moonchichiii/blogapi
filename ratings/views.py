@@ -20,9 +20,8 @@ class CreateOrUpdateRatingView(generics.CreateAPIView):
             user=request.user,
             post=post,
             defaults={"value": serializer.validated_data["value"]},
-        )
+        )        
         
-        # Call update_post_stats after the post is retrieved
         update_post_stats.delay(post.id)
         
         message = "Rating created successfully." if created else "Rating updated successfully."

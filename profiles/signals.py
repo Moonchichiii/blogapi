@@ -38,6 +38,5 @@ def update_follower_count_on_unfollow(sender, instance, **kwargs):
         followed_profile = Profile.objects.get(user=instance.followed)
         followed_profile.follower_count = Follow.objects.filter(followed=instance.followed).count()
         followed_profile.save()
-    except Profile.DoesNotExist:
-        # The profile has already been deleted, so we don't need to update it
+    except Profile.DoesNotExist:        
         pass
