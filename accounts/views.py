@@ -206,7 +206,29 @@ class CustomTokenRefreshView(TokenRefreshView):
                 secure=request.is_secure(),
             )
         return response
+class LogoutView(APIView):
+    """Handles user logout."""
 
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            refresh_token = request.COOKIES.get("refresh_token")
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+            response = Response(
+                {"message": "Logout successful.", "type": "success"},
+                status=status.HTTP_205_RESET_CONTENT,
+            )
+            response.delete_cookie("access_token")
+            response.delete_cookie("refresh_token")
+            return response
+        except Exception as e:
+            logger.error(f"Logout failed: {e}")
+            return Response(
+                {"message": "Invalid refresh token.", "type": "error", "error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 class UpdateEmailView(generics.UpdateAPIView):
     """Updates user email."""
@@ -240,33 +262,6 @@ class UpdateEmailView(generics.UpdateAPIView):
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
-
-
-class LogoutView(APIView):
-    """Handles user logout."""
-
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        try:
-            refresh_token = request.COOKIES.get("refresh_token")
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-            response = Response(
-                {"message": "Logout successful.", "type": "success"},
-                status=status.HTTP_205_RESET_CONTENT,
-            )
-            response.delete_cookie("access_token")
-            response.delete_cookie("refresh_token")
-            return response
-        except Exception as e:
-            logger.error(f"Logout failed: {e}")
-            return Response(
-                {"message": "Invalid refresh token.", "type": "error", "error": str(e)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-
 class AccountDeletionView(APIView):
     """Deletes user account."""
 

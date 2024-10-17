@@ -76,22 +76,19 @@ class AggregatePopularityScoreTaskTests(TestCase):
         """Test with no posts and no followers."""
         result = aggregate_popularity_score(self.user.id)
         self.metrics.refresh_from_db()
-       
         self.assertEqual(self.metrics.post_count, 0)
         self.assertEqual(self.metrics.average_post_rating, 0)
         self.assertEqual(self.metrics.follower_count, 0)
         self.assertEqual(self.metrics.popularity_score, 0)
         self.assertEqual(result, f"Updated popularity score for user {self.user.id}")
 
-     def test_aggregate_popularity_score_with_posts_and_followers(self):
+    def test_aggregate_popularity_score_with_posts_and_followers(self):
         """Test with posts and followers."""
         Post.objects.create(author=self.user, content="Test post", average_rating=4.5)
         self.profile.follower_count = 10
         self.profile.save()
-
         result = aggregate_popularity_score(self.user.id)
         self.metrics.refresh_from_db()
-
         self.assertEqual(self.metrics.post_count, 1)
         self.assertEqual(self.metrics.average_post_rating, 4.5)
         self.assertEqual(self.metrics.follower_count, 10)
@@ -121,7 +118,6 @@ class AggregatePopularityScoreTaskTests(TestCase):
         """Test logging in aggregate_popularity_score."""
         with self.assertLogs('popularity.tasks', level='DEBUG') as cm:
             aggregate_popularity_score(self.user.id)
-       
         log_output = '\n'.join(cm.output)
         self.assertIn("Starting task to aggregate popularity score", log_output)
         self.assertIn(f"Updated popularity score for user {self.user.id}", log_output)
@@ -133,12 +129,9 @@ class AggregatePopularityScoreTaskTests(TestCase):
         self.metrics.follower_count = 10
         self.metrics.popularity_score = 100
         self.metrics.save()
-
         Post.objects.create(author=self.user, content="New post", average_rating=5.0)
-        
         result = aggregate_popularity_score(self.user.id)
         self.metrics.refresh_from_db()
-
         self.assertEqual(self.metrics.post_count, 1)
         self.assertEqual(self.metrics.average_post_rating, 5.0)
         self.assertEqual(self.metrics.follower_count, 0)
@@ -148,10 +141,8 @@ class AggregatePopularityScoreTaskTests(TestCase):
     def test_aggregate_popularity_score_with_posts_no_followers(self):
         """Test with posts but no followers."""
         Post.objects.create(author=self.user, content="Test post", average_rating=4.0)
-
         result = aggregate_popularity_score(self.user.id)
         self.metrics.refresh_from_db()
-
         self.assertEqual(self.metrics.post_count, 1)
         self.assertEqual(self.metrics.average_post_rating, 4.0)
         self.assertEqual(self.metrics.follower_count, 0)
@@ -189,11 +180,9 @@ class PopularityMetricsQueryTests(TestCase):
     def test_aggregate_functions(self):
         """Test aggregate functions on popularity score."""
         from django.db.models import Avg, Max, Min
-        
         avg_score = PopularityMetrics.objects.aggregate(Avg('popularity_score'))['popularity_score__avg']
         max_score = PopularityMetrics.objects.aggregate(Max('popularity_score'))['popularity_score__max']
         min_score = PopularityMetrics.objects.aggregate(Min('popularity_score'))['popularity_score__min']
-        
         self.assertEqual(avg_score, 20)
         self.assertEqual(max_score, 40)
         self.assertEqual(min_score, 0)

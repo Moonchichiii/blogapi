@@ -7,7 +7,7 @@ from unittest.mock import patch
 from django.db import IntegrityError 
 from .models import Follow
 from profiles.models import Profile
-
+from .serializers import FollowSerializer
 User = get_user_model()
 
 class FollowTests(APITestCase):
@@ -131,7 +131,8 @@ class FollowTests(APITestCase):
         """Test that unfollowing without providing a followed ID fails."""
         response = self.client.delete(self.follow_unfollow_url, {})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
+        
+        
 class FollowModelTests(TestCase):
     """Test suite for the Follow model."""
 
@@ -195,3 +196,34 @@ class FollowTaskTests(TestCase):
         remove_follows_for_user(self.user1.id)
         
         self.assertEqual(Follow.objects.count(), 0)
+
+    def test_follow_serializer_create(self):
+        user3 = User.objects.create(email="user3@example.com", profile_name="user3")
+        user4 = User.objects.create(email="user4@example.com", profile_name="user4")
+    
+        # Only include 'followed' in the initial data
+        data = {'followed': user4.id}
+    
+        serializer = FollowSerializer(data=data)
+        self.assertTrue(serializer.is_valid())
+    
+        # Simulate how the view would create a Follow instance
+        follow = serializer.save(follower=user3)
+    
+        self.assertIsInstance(follow, Follow)
+        self.assertEqual(follow.follower, user3)
+        self.assertEqual(follow.followed, user4)
+    
+        # Verify that the create method was called with the correct data
+        print("Serializer validated_data:", serializer.validated_data)
+        print("Created Follow instance:", follow)
+
+    def test_follow_serializer_update(self):
+        user5 = User.objects.create(email="user5@example.com", profile_name="user5")
+        user6 = User.objects.create(email="user6@example.com", profile_name="user6")
+        user7 = User.objects.create(email="user7@example.com", profile_name="user7")
+        follow = Follow.objects.create(follower=user5, followed=user6)
+        serializer = FollowSerializer(follow, data={'followed': user7.id}, partial=True)
+        self.assertTrue(serializer.is_valid())
+        updated_follow = serializer.update(follow, serializer.validated_data)
+        self.assertEqual(updated_follow.followed, user7)

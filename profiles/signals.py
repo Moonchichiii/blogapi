@@ -34,8 +34,10 @@ def update_follower_count_on_follow(sender, instance, created, **kwargs):
 
 @receiver(post_delete, sender=Follow)
 def update_follower_count_on_unfollow(sender, instance, **kwargs):
-    followed_profile = Profile.objects.get(user=instance.followed)
-    followed_profile.follower_count = Follow.objects.filter(followed=instance.followed).count()
-    followed_profile.save()
-    logger.info(f"Follower count updated for user: {instance.followed.profile_name}")
-    aggregate_popularity_score.delay(instance.followed.id)
+    try:
+        followed_profile = Profile.objects.get(user=instance.followed)
+        followed_profile.follower_count = Follow.objects.filter(followed=instance.followed).count()
+        followed_profile.save()
+    except Profile.DoesNotExist:
+        # The profile has already been deleted, so we don't need to update it
+        pass

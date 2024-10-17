@@ -7,5 +7,9 @@ from notifications.tasks import send_notification_task
 def create_tag_notification(sender, instance, created, **kwargs):
     if created:
         content_type = instance.content_type.model_class().__name__
-        message = f"{instance.tagger.profile_name} tagged you in a {content_type}."
-        send_notification_task.delay(instance.tagged_user.id, "Tag", message)
+        message = f'You were tagged in a {content_type} by {instance.tagger.profile_name}.'
+        send_notification_task.delay(
+            user_id=instance.tagged_user.id,
+            notification_type="Tag",
+            message=message
+        )
