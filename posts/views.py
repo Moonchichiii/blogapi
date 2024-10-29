@@ -42,12 +42,21 @@ class PostList(generics.ListCreateAPIView):
     throttle_classes = [] 
 
     def get_queryset(self):
-        user = self.request.user
         queryset = Post.objects.select_related("author").prefetch_related("tags", "ratings")
-        if user.is_authenticated and not user.is_superuser and not user.is_staff:
-            queryset = queryset.filter(Q(author=user) | Q(is_approved=True))
+        user = self.request.user
+
+        # Adding the 'author=current' filter
+        author = self.request.query_params.get("author")
+        if author == "current" and user.is_authenticated:
+            queryset = queryset.filter(author=user)
         else:
-            queryset = queryset.filter(is_approved=True)
+            # Default behavior for authenticated and non-authenticated users
+            if user.is_authenticated and not user.is_superuser and not user.is_staff:
+                queryset = queryset.filter(Q(author=user) | Q(is_approved=True))
+            else:
+                queryset = queryset.filter(is_approved=True)
+        
+        # Existing search functionality
         search_query = self.request.query_params.get("search")
         if search_query:
             queryset = queryset.filter(
@@ -55,6 +64,7 @@ class PostList(generics.ListCreateAPIView):
                 Q(content__icontains=search_query) |
                 Q(author__profile_name__icontains=search_query)
             )
+
         return queryset.distinct()
 
     @method_decorator(cache_page(CACHE_TIMEOUT_LONG))
@@ -69,6 +79,7 @@ class PostList(generics.ListCreateAPIView):
     
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
+
 
 class PostDetail(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update, or delete a post."""

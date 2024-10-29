@@ -15,46 +15,42 @@ from .views import (
 )
 
 urlpatterns = [
-    path("register/", RegisterView.as_view(), name="register"),
-    path(
-        "activate/<str:uidb64>/<str:token>/",
-        ActivateAccountView.as_view(),
-        name="activate",
-    ),
+    # User registration and activation
+    path('register/', RegisterView.as_view(), name='register'),
+    path('activate/', ActivateAccountView.as_view(), name='activate'),
+    
+        
+    # User login and logout
     path("login/", LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
+    
+    # Current user info
     path("current-user/", CurrentUserView.as_view(), name="current_user"),
+    
+    # Token refresh
     path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
+    
+    # Password reset
     path(
         "password-reset/",
-        include(
-            [
-                path("", auth_views.PasswordResetView.as_view(), name="password_reset"),
-                path(
-                    "done/",
-                    auth_views.PasswordResetDoneView.as_view(),
-                    name="password_reset_done",
-                ),
-                path(
-                    "<uidb64>/<token>/",
-                    auth_views.PasswordResetConfirmView.as_view(),
-                    name="password_reset_confirm",
-                ),
-                path(
-                    "complete/",
-                    auth_views.PasswordResetCompleteView.as_view(),
-                    name="password_reset_complete",
-                ),
-            ]
-        ),
+        include([
+            path("", auth_views.PasswordResetView.as_view(), name="password_reset"),
+            path("done/", auth_views.PasswordResetDoneView.as_view(), name="password_reset_done"),
+            path("<uidb64>/<token>/", auth_views.PasswordResetConfirmView.as_view(), name="password_reset_confirm"),
+            path("complete/", auth_views.PasswordResetCompleteView.as_view(), name="password_reset_complete"),
+        ]),
     ),
-    path(
-        "resend-verification/",
-        ResendVerificationEmailView.as_view(),
-        name="resend_verification",
-    ),
+    
+    # Resend verification email
+    path("resend-verification/", ResendVerificationEmailView.as_view(), name="resend_verification"),
+    
+    # Two-factor authentication setup and verification
     path("setup-2fa/", SetupTwoFactorView.as_view(), name="setup_2fa"),
-    path("verify-2fa/", TwoFactorVerifyView.as_view(), name="verify_2fa"),
+    path("verify-2fa/", TwoFactorVerifyView.as_view(), name="verify_2fa"), 
+    
+    # Update email
     path("update-email/", UpdateEmailView.as_view(), name="update_email"),
+    
+    # Account deletion
     path("delete-account/", AccountDeletionView.as_view(), name="delete_account"),
 ]

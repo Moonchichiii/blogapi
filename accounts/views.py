@@ -1,13 +1,16 @@
 import logging
+from django.shortcuts import get_object_or_404
 from django.conf import settings
-from django.contrib.auth import get_user_model, login
+from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
-from django.core.signing import TimestampSigner
+from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
 from django.db import transaction
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from django_otp.oath import totp
+from datetime import timedelta
 
 from rest_framework import generics, status, serializers
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -15,6 +18,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
+
 from .serializers import UserRegistrationSerializer, LoginSerializer, UserSerializer
 from .tokens import account_activation_token
 
@@ -26,73 +30,91 @@ class TwoFactorAuthenticationError(Exception):
 
 # Helper Functions
 def send_activation_email(user, activation_link):
-    subject = "Activate your account"
-    message = f"Hi {user.profile_name},\n\nPlease click the link below to activate your account:\n{activation_link}\n\nThank you!"
-    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
+    subject = "Verify your account"
+    message = f"""
+Hi {user.profile_name},
+
+Please click the link below to verify your account:
+{activation_link}
+
+This link will expire in 4 hours.
+
+Thank you!
+    """
+    send_mail(
+        subject,
+        message,
+        settings.DEFAULT_FROM_EMAIL,
+        [user.email],
+        fail_silently=False
+    )
 
 def generate_2fa_token(device):
     return totp(device.bin_key)
 
-# Registration and Account Activation
 class RegisterView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
     permission_classes = [AllowAny]
 
     def perform_create(self, serializer):
+        user = serializer.save(is_active=False)
         try:
-            user = serializer.save(is_active=False)
             self.send_activation_email(user)
         except Exception as e:
-            logger.error(f"Error during user registration: {str(e)}")
-            raise serializers.ValidationError({"message": "Registration failed. Please try again later.", "type": "error"})
+            logger.error(f"Error during registration: {str(e)}")
+            raise serializers.ValidationError({
+                "message": "Registration failed. Try again later.", 
+                "type": "error"
+            })
 
     def send_activation_email(self, user):
-        try:
-            token = account_activation_token.make_token(user)
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            activation_link = f"{settings.FRONTEND_URL}/activate/{uid}/{token}/"
-            send_activation_email(user, activation_link)
-        except Exception as e:
-            logger.error(f"Failed to send activation email: {str(e)}")
-            raise serializers.ValidationError({"message": "Failed to send activation email. Please try again later.", "type": "error"})
+        signer = TimestampSigner()
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = account_activation_token.make_token(user)
+        signed_token = signer.sign_object({
+            'token': token,
+            'uid': uid,
+            'exp': (timezone.now() + timedelta(hours=4)).timestamp()
+        })
+        # Change from /verify to / 
+        activation_link = f"{settings.FRONTEND_URL}/?token={signed_token}"
+        send_mail(
+            "Verify your account",
+            f"Hi {user.profile_name},\n\nPlease click the link to verify your account:\n{activation_link}\n\nThis link will expire in 4 hours.\n\nThanks!",
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email]
+        )
 
 class ActivateAccountView(APIView):
-    permission_classes = [AllowAny]
+    def get(self, request):
+        signed_token = request.query_params.get('token')
+        if not signed_token:
+            return Response({"message": "Invalid activation link", "type": "error"}, status=400)
 
-    def get(self, request, uidb64, token):
+        signer = TimestampSigner()
         try:
-            uid = force_str(urlsafe_base64_decode(uidb64))
-            user = User.objects.select_related("profile").get(pk=uid)
-        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-            logger.warning(f"Invalid activation attempt: uidb64={uidb64}, token={token}")
-            return Response({"message": "Invalid activation link.", "type": "error"}, status=status.HTTP_400_BAD_REQUEST)
+            data = signer.unsign_object(signed_token, max_age=14400)  # 4 hours
+            uid = force_str(urlsafe_base64_decode(data['uid']))
+            user = get_object_or_404(User, pk=uid)
 
-        if user and account_activation_token.check_token(user, token):
-            try:
+            if account_activation_token.check_token(user, data['token']):
                 with transaction.atomic():
                     user.is_active = True
                     user.save()
-                    login(request, user)
                     refresh = RefreshToken.for_user(user)
-                    signer = TimestampSigner()
-                    setup_2fa_token = signer.sign(str(user.pk))
-                    return Response(
-                        {
-                            "message": "Your email has been successfully verified.",
-                            "type": "success",
-                            "user": UserSerializer(user, context={"request": request}).data,
-                            "access": str(refresh.access_token),
-                            "refresh": str(refresh),
-                            "setup_2fa_token": setup_2fa_token,
-                        },
-                        status=status.HTTP_200_OK,
-                    )
-            except Exception as e:
-                logger.error(f"Error during account activation: {str(e)}")
-                return Response({"message": "Account activation failed. Please try again later.", "type": "error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    return Response({
+                        "message": "Email verified successfully",
+                        "type": "success",
+                        "verified": True,
+                        "user": UserSerializer(user, context={"request": request}).data,
+                        "access": str(refresh.access_token),
+                        "refresh": str(refresh),
+                    })
 
-        logger.warning(f"Invalid token for user activation: user_id={uid}, token={token}")
-        return Response({"message": "Invalid or expired activation link.", "type": "error"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"message": "Invalid activation link", "type": "error"}, status=400)
+
+        except (SignatureExpired, BadSignature, User.DoesNotExist):
+            return Response({"message": "Invalid or expired link", "type": "error"}, status=400)
 
 class ResendVerificationEmailView(APIView):
     permission_classes = [AllowAny]

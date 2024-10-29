@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from .models import Rating
 from .serializers import RatingSerializer
 from .tasks import update_post_stats
-from django.db import transaction
+
 
 class CreateOrUpdateRatingView(generics.CreateAPIView):
     serializer_class = RatingSerializer
@@ -32,3 +32,36 @@ class CreateOrUpdateRatingView(generics.CreateAPIView):
             },
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+
+class GetUserRatingView(generics.RetrieveAPIView):
+    serializer_class = RatingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        post_id = self.kwargs['post_id']
+        user = self.request.user
+        try:
+            return Rating.objects.get(post_id=post_id, user=user)
+        except Rating.DoesNotExist:
+            return None
+
+    def get(self, request, *args, **kwargs):
+        rating = self.get_object()
+        if rating:
+            serializer = self.get_serializer(rating)
+            return Response(
+                {
+                    "data": serializer.data,
+                    "message": "Rating retrieved successfully."
+                },
+                status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                {
+                    "data": {"value": None},
+                    "message": "Rating not found."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )

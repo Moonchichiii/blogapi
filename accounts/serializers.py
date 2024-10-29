@@ -39,13 +39,23 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     """Serializer for user registration."""
 
     email = serializers.EmailField(
-        required=True, validators=[UniqueValidator(queryset=CustomUser.objects.all())]
+        required=True, 
+        validators=[UniqueValidator(
+            queryset=CustomUser.objects.all(),
+            message="A user with this email already exists."
+        )]
     )
     profile_name = serializers.CharField(
-        required=True, validators=[UniqueValidator(queryset=CustomUser.objects.all())]
+        required=True, 
+        validators=[UniqueValidator(
+            queryset=CustomUser.objects.all(),
+            message="This profile name is already taken."
+        )]
     )
     password = serializers.CharField(
-        write_only=True, required=True, validators=[validate_password]
+        write_only=True, 
+        required=True, 
+        validators=[validate_password]
     )
     password2 = serializers.CharField(write_only=True, required=True)
 
@@ -55,9 +65,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         if attrs["password"] != attrs["password2"]:
-            raise serializers.ValidationError(
-                {"password": "Password fields didn't match."}
-            )
+            raise serializers.ValidationError({"password": "Password fields didn't match."})
         return attrs
 
     def create(self, validated_data):
