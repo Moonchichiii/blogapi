@@ -141,19 +141,23 @@ class SetupTwoFactorView(APIView):
     def post(self, request):
         user = request.user
         device = TOTPDevice.objects.filter(user=user, name="default").first()
-       
+
         if device:
-            return Response({"message": "Two-factor authentication is already set up.", "type": "error"}, status=status.HTTP_400_BAD_REQUEST)
+            if device.confirmed:
+                return Response({"message": "Two-factor authentication is already set up.", "type": "error"}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                # Delete unconfirmed device
+                device.delete()
 
         try:
-            device = TOTPDevice.objects.create(user=user, name="default")
+            device = TOTPDevice.objects.create(user=user, name="default", confirmed=False)
             token = totp(device.bin_key)
-           
+
             return Response({
                 "message": "Two-factor authentication setup initiated.",
                 "type": "success",
                 "config_url": device.config_url,
-                "token": token,  
+                "token": token,
             }, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Error setting up 2FA for user {user.id}: {str(e)}")
@@ -162,17 +166,26 @@ class SetupTwoFactorView(APIView):
     def put(self, request):
         user = request.user
         token = request.data.get('token')
-       
+
         device = TOTPDevice.objects.filter(user=user, name="default").first()
         if not device:
             return Response({"message": "Two-factor authentication is not set up.", "type": "error"}, status=status.HTTP_400_BAD_REQUEST)
-       
+
         if device.verify_token(token):
             device.confirmed = True
             device.save()
             return Response({"message": "Two-factor authentication setup confirmed.", "type": "success"}, status=status.HTTP_200_OK)
         else:
             return Response({"message": "Invalid token.", "type": "error"}, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request):
+        user = request.user
+        device = TOTPDevice.objects.filter(user=user, name="default", confirmed=False).first()
+        if device:
+            device.delete()
+            return Response({"message": "Two-factor authentication setup canceled.", "type": "success"}, status=status.HTTP_200_OK)
+        else:
+            return Response({"message": "No pending two-factor authentication setup to cancel.", "type": "info"}, status=status.HTTP_200_OK)
 
 class TwoFactorVerifyView(APIView):
     permission_classes = [AllowAny]
@@ -207,7 +220,7 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data["user"]
-           
+            
             device = TOTPDevice.objects.filter(user=user, name="default", confirmed=True).first()
             if device:
                 return Response({
@@ -215,7 +228,8 @@ class LoginView(APIView):
                     "type": "2fa_required",
                     "user_id": user.id,
                 }, status=status.HTTP_200_OK)
-           
+            
+            # If 2FA is not set up, proceed with login
             refresh = RefreshToken.for_user(user)
             return Response({
                 "message": "Login successful.",
