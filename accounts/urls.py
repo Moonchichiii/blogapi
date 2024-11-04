@@ -12,6 +12,8 @@ from .views import (
     TwoFactorVerifyView,
     AccountDeletionView,
     CustomTokenRefreshView,
+    UpdateProfileNameView
+    
 )
 
 urlpatterns = [
@@ -27,6 +29,7 @@ urlpatterns = [
     # Current user info
     path("current-user/", CurrentUserView.as_view(), name="current_user"),
     
+     path("update-profile-name/", UpdateProfileNameView.as_view(), name="update_profile_name"),
     # Token refresh
     path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     

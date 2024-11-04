@@ -22,6 +22,9 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .serializers import UserRegistrationSerializer, LoginSerializer, UserSerializer
 from .tokens import account_activation_token
 
+from rest_framework import generics, permissions
+from .serializers import UserSerializer
+
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
@@ -320,6 +323,8 @@ class AccountDeletionView(APIView):
             "message": "Your account has been successfully deleted.",
             "type": "success",
         }, status=status.HTTP_200_OK)
+        
+        
 
 class CurrentUserView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
@@ -327,3 +332,11 @@ class CurrentUserView(generics.RetrieveAPIView):
 
     def get_object(self):
         return User.objects.select_related("profile").get(pk=self.request.user.pk)
+
+
+class UpdateProfileNameView(generics.UpdateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user

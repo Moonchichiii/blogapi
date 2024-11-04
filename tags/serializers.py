@@ -7,10 +7,13 @@ from posts.models import Post
 from .models import ProfileTag
 
 class ProfileTagSerializer(serializers.ModelSerializer):
+    tagged_user = serializers.CharField(source='tagged_user.profile_name', read_only=True)
+    tagger = serializers.CharField(source='tagger.profile_name', read_only=True)
+
     class Meta:
         model = ProfileTag
-        fields = ["id", "tagged_user", "content_type", "object_id", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields = ["id", "tagged_user", "tagger", "content_type", "object_id", "created_at"]
+        read_only_fields = ["id", "created_at", "tagged_user", "tagger", "content_type", "object_id"]
 
     def validate(self, attrs):
         request = self.context.get("request")

@@ -80,11 +80,21 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(read_only=True)
+    profile_name = serializers.CharField(
+        required=True,
+        validators=[
+            UniqueValidator(
+                queryset=CustomUser.objects.all(),
+                message="This profile name is already taken."
+            )
+        ]
+    )
 
     class Meta:
         model = CustomUser
         fields = ("id", "email", "profile_name", "profile")
-        read_only_fields = ("id", "profile_name")
+        read_only_fields = ("id", "email")
+
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

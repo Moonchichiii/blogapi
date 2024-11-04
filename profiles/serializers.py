@@ -1,15 +1,10 @@
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
 from cloudinary.forms import CloudinaryFileField
 from .models import Profile
 from popularity.models import PopularityMetrics
 from backend.utils import validate_image
 
-User = get_user_model()
-
 class ProfileSerializer(serializers.ModelSerializer):
-    profile_name = serializers.CharField(source='user.profile_name', read_only=True)
-    popularity_score = serializers.SerializerMethodField()
     image = CloudinaryFileField(
         options={
             "folder": "profiles",
@@ -21,32 +16,32 @@ class ProfileSerializer(serializers.ModelSerializer):
         },
         required=False,
     )
-
+    image_url = serializers.SerializerMethodField()
+    popularity_score = serializers.SerializerMethodField()
+    
     class Meta:
         model = Profile
         fields = [
-            "id",
-            "user_id",
-            "profile_name",
             "bio",
             "image",
+            "image_url",
             "popularity_score",
             "follower_count",
             "following_count",
         ]
         read_only_fields = [
-            "id",
-            "user_id",
-            "profile_name",
             "popularity_score",
             "follower_count",
             "following_count",
         ]
-    
+
+    def get_image_url(self, obj):
+        return obj.image.url if obj.image else None
+
     def get_popularity_score(self, obj):
         try:
             return obj.user.popularity_metrics.popularity_score
-        except PopularityMetrics.DoesNotExist:
+        except (AttributeError, PopularityMetrics.DoesNotExist):
             return 0.0
 
     def validate_image(self, value):

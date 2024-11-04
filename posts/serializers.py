@@ -5,6 +5,7 @@ from accounts.models import CustomUser
 from tags.models import ProfileTag
 from .models import Post
 from backend.utils import validate_image
+from tags.serializers import ProfileTagSerializer
 
 class PostListSerializer(serializers.ModelSerializer):
     """Serializer for listing posts."""
@@ -22,23 +23,30 @@ class PostListSerializer(serializers.ModelSerializer):
         return request and request.user.is_authenticated and request.user == obj.author
 
 class PostSerializer(serializers.ModelSerializer):
-    """Serializer for creating and updating posts."""
     author = serializers.CharField(source="author.profile_name", read_only=True)
     is_owner = serializers.SerializerMethodField()
     image = serializers.ImageField(required=False)
-    tagged_users = serializers.SerializerMethodField(read_only=True)
-    tags = serializers.ListField(child=serializers.CharField(), write_only=True)
+    tags = ProfileTagSerializer(many=True, read_only=True)
+    tags_input = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
+    average_rating = serializers.FloatField(read_only=True)
 
     class Meta:
         model = Post
         fields = [
-            "id", "title", "content", "image", "author",
-            "created_at", "average_rating", "is_owner", "tagged_users", "tags"
+            "id",
+            "title",
+            "content",
+            "image",
+            "author",
+            "created_at",
+            "average_rating",
+            "is_owner",
+            "tags",
+            "tags_input",
         ]
         read_only_fields = ["id", "author", "created_at", "average_rating"]
 
     def get_is_owner(self, obj):
-        """Check if the request user is the owner of the post."""
         request = self.context.get("request")
         return request and request.user.is_authenticated and request.user == obj.author
 
@@ -70,25 +78,35 @@ class PostSerializer(serializers.ModelSerializer):
         self._handle_tags(instance, tags_data)
         return instance
 
-    def validate_tags(self, value):
+    def validate_tags_input(self, value):
         for tag_name in value:
             if not CustomUser.objects.filter(profile_name=tag_name).exists():
                 raise serializers.ValidationError(f"User '{tag_name}' does not exist.")
         return value
 
+    def create(self, validated_data):
+        tags_data = validated_data.pop("tags_input", [])
+        post = Post.objects.create(**validated_data)
+        self._handle_tags(post, tags_data)
+        return post
+
+    def update(self, instance, validated_data):
+        tags_data = validated_data.pop("tags_input", [])
+        instance = super().update(instance, validated_data)
+        self._handle_tags(instance, tags_data)
+        return instance
 
     def _handle_tags(self, post, tags_data):
         """Handle the creation and assignment of tags."""
-        tag_objects = []
+        post.tags.clear()  # Clear existing tags
         for tag_name in tags_data:
             tagged_user = CustomUser.objects.filter(profile_name=tag_name).first()
             if not tagged_user:
-                raise serializers.ValidationError({"tags": f"User '{tag_name}' does not exist."})
+                raise serializers.ValidationError({"tags_input": f"User '{tag_name}' does not exist."})
             tag, created = ProfileTag.objects.get_or_create(
                 tagged_user=tagged_user,
                 tagger=post.author,
                 content_type=ContentType.objects.get_for_model(Post),
                 object_id=post.id,
             )
-            tag_objects.append(tag)
-        post.tags.set(tag_objects)
+            post.tags.add(tag)

@@ -16,6 +16,15 @@ class RatingSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Rating
+        fields = ["value"]
+
+    def validate(self, attrs):
+        if attrs['post'].author == self.context['request'].user:
+            raise serializers.ValidationError("You cannot rate your own post.")
+        return attrs
+
+    class Meta:
+        model = Rating
         fields = ["id", "profile_name", "post", "value", "post_title"]
 
     def validate_value(self, value):
