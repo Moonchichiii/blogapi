@@ -6,6 +6,7 @@ from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
+from rest_framework import status
 
 from .models import Profile
 from .serializers import ProfileSerializer
@@ -76,6 +77,15 @@ class ProfileDetailView(generics.RetrieveUpdateAPIView):
         """Update a profile."""
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
+        
+        
+        if 'profile_name' in request.data:
+            if Profile.objects.filter(profile_name=request.data['profile_name']).exclude(user=instance.user).exists():
+                return Response(
+                    {"message": "This profile name is already taken.", "type": "error"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)

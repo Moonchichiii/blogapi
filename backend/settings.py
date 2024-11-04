@@ -9,40 +9,12 @@ import cloudinary
 from cloudinary.utils import cloudinary_url
 from celery.schedules import crontab
 
-
-# import logging
-# logging.basicConfig(level=logging.INFO)
-
-
-# LOGGING = {
-#     'version': 1,
-#     'disable_existing_loggers': False,
-#     'handlers': {
-#         'console': {
-#             'class': 'logging.StreamHandler',
-#             'level': 'DEBUG',
-#         },
-#     },
-#     'loggers': {
-#         'popularity.tasks': {
-#             'handlers': ['console'],
-#             'level': 'DEBUG',
-#             'propagate': True,
-#         },
-#     },
-# }
-
-
-
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Security Settings
 SECRET_KEY = config("SECRET_KEY")
 DEBUG = config("DEBUG", default=False, cast=bool)
-
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="").split(",")
-
 
 # CORS Configuration
 CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
@@ -90,16 +62,13 @@ INSTALLED_APPS = [
     "ratings",
     "tags",
     "followers",
-    'popularity',
-    'notifications.apps.NotificationsConfig',
-    
+    "popularity",
+    "notifications.apps.NotificationsConfig",
 ]
 
 LOGIN_URL = "two_factor:login"
 LOGIN_REDIRECT_URL = "two_factor:profile"
 TWO_FACTOR_PATCH_ADMIN = True
-
-
 
 # Password Validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -121,7 +90,6 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "accounts.validators.NumberValidator",
     },
 ]
-
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -187,13 +155,10 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-
 # Default Primary Key Field Type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-
 # Celery settings
-
 CELERY_BROKER_URL = 'redis://localhost:6379/1'
 CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
 CELERY_ACCEPT_CONTENT = ['json']
@@ -207,7 +172,7 @@ CELERY_TASK_ALWAYS_EAGER = False
 CELERY_BEAT_SCHEDULE = {
     "update-popularity-scores": {
         "task": "popularity.tasks.update_all_popularity_scores",
-        "schedule": crontab(hour=0, minute=0), 
+        "schedule": crontab(hour=0, minute=0),
     },
 }
 
@@ -230,7 +195,6 @@ CACHES = (
         }
     }
 )
-
 
 # REST Framework Settings
 REST_FRAMEWORK = {
@@ -256,7 +220,6 @@ REST_FRAMEWORK = {
     "PAGE_SIZE_QUERY_PARAM": "page_size",
     "MAX_PAGE_SIZE": 100,
 }
-
 
 # Simple JWT Settings
 SIMPLE_JWT = {
@@ -291,7 +254,6 @@ EMAIL_HOST_USER = config("EMAIL_USER")
 EMAIL_HOST_PASSWORD = config("EMAIL_PASSWORD")
 DEFAULT_FROM_EMAIL = "noreply@theblog.com"
 
-
 if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000
     SECURE_SSL_REDIRECT = True
@@ -300,5 +262,3 @@ if not DEBUG:
     X_FRAME_OPTIONS = "DENY"
     CSRF_COOKIE_SECURE = True
     SESSION_COOKIE_SECURE = True
-
-

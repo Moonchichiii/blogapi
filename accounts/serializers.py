@@ -2,7 +2,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
+from django.db import transaction
 from .models import CustomUser
+from profiles.models import Profile
 from profiles.serializers import ProfileSerializer
 
 User = get_user_model()
@@ -10,7 +12,6 @@ User = get_user_model()
 
 class LoginSerializer(serializers.Serializer):
     """Serializer for user login."""
-
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
@@ -37,24 +38,24 @@ class LoginSerializer(serializers.Serializer):
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     """Serializer for user registration."""
-
     email = serializers.EmailField(
-        required=True, 
+        required=True,
         validators=[UniqueValidator(
             queryset=CustomUser.objects.all(),
             message="A user with this email already exists."
         )]
     )
     profile_name = serializers.CharField(
-        required=True, 
+        required=True,
+        write_only=True,  # Add this to ensure it's only used for write operations
         validators=[UniqueValidator(
-            queryset=CustomUser.objects.all(),
+            queryset=Profile.objects.all(),  # Changed to check Profile model
             message="This profile name is already taken."
         )]
     )
     password = serializers.CharField(
-        write_only=True, 
-        required=True, 
+        write_only=True,
+        required=True,
         validators=[validate_password]
     )
     password2 = serializers.CharField(write_only=True, required=True)
@@ -68,33 +69,33 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"password": "Password fields didn't match."})
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
-        validated_data.pop("password2", None)
+        # Store profile_name for signal handler
+        profile_name = validated_data.pop('profile_name')
+        validated_data.pop('password2', None)
+        
+        # Create user without profile_name
         user = CustomUser.objects.create_user(
             email=validated_data["email"],
-            profile_name=validated_data["profile_name"],
             password=validated_data["password"],
         )
+        
+        # Update the profile created by the signal
+        if hasattr(user, 'profile'):
+            user.profile.profile_name = profile_name
+            user.profile.save()
+        
         return user
 
 
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(read_only=True)
-    profile_name = serializers.CharField(
-        required=True,
-        validators=[
-            UniqueValidator(
-                queryset=CustomUser.objects.all(),
-                message="This profile name is already taken."
-            )
-        ]
-    )
 
     class Meta:
         model = CustomUser
-        fields = ("id", "email", "profile_name", "profile")
+        fields = ("id", "email", "profile")
         read_only_fields = ("id", "email")
-
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

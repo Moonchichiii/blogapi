@@ -22,7 +22,6 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .serializers import UserRegistrationSerializer, LoginSerializer, UserSerializer
 from .tokens import account_activation_token
 
-from rest_framework import generics, permissions
 from .serializers import UserSerializer
 
 User = get_user_model()
@@ -333,10 +332,3 @@ class CurrentUserView(generics.RetrieveAPIView):
     def get_object(self):
         return User.objects.select_related("profile").get(pk=self.request.user.pk)
 
-
-class UpdateProfileNameView(generics.UpdateAPIView):
-    serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_object(self):
-        return self.request.user
