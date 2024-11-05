@@ -11,8 +11,12 @@ from rest_framework import status
 from .models import Profile
 from .serializers import ProfileSerializer
 from followers.models import Follow
+
+
+
 from popularity.models import PopularityMetrics
 from backend.permissions import IsOwnerOrReadOnly
+
 
 CACHE_TIMEOUT = 60 * 30
 logger = logging.getLogger(__name__)
@@ -32,7 +36,7 @@ class ProfileListView(generics.ListAPIView):
         user = self.request.user
         filter_type = self.request.query_params.get('filter', 'popular')
 
-        # Subquery to get popularity score
+        # Subquery to get popularity score from PopularityMetrics
         popularity_subquery = PopularityMetrics.objects.filter(
             user=OuterRef('user')
         ).values('popularity_score')[:1]
@@ -42,6 +46,7 @@ class ProfileListView(generics.ListAPIView):
         )
 
         if filter_type == 'followed':
+            # Filter for profiles that the user follows
             queryset = queryset.filter(
                 Exists(Follow.objects.filter(follower=user, followed=OuterRef('user')))
             )
@@ -51,13 +56,7 @@ class ProfileListView(generics.ListAPIView):
     @method_decorator(cache_page(CACHE_TIMEOUT))
     def list(self, request, *args, **kwargs):
         """Cache and paginate profile listings."""
-        queryset = self.get_queryset()
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        return super().list(request, *args, **kwargs)
 
 class ProfileDetailView(generics.RetrieveUpdateAPIView):
     """Retrieve or update a profile."""
@@ -77,7 +76,6 @@ class ProfileDetailView(generics.RetrieveUpdateAPIView):
         """Update a profile."""
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
-        
         
         if 'profile_name' in request.data:
             if Profile.objects.filter(profile_name=request.data['profile_name']).exclude(user=instance.user).exists():

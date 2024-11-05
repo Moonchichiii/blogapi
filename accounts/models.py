@@ -2,7 +2,6 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from .managers import CustomUserManager
 
-
 class CustomUser(AbstractBaseUser, PermissionsMixin):
     """Custom user model with email as the username field."""
     email = models.EmailField(unique=True)
@@ -11,7 +10,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     date_joined = models.DateTimeField(auto_now_add=True)
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = []
+    REQUIRED_FIELDS = []  
 
     objects = CustomUserManager()
 

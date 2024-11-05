@@ -223,33 +223,61 @@ class LoginView(APIView):
         if serializer.is_valid():
             user = serializer.validated_data["user"]
             
+            # Check 2FA
             device = TOTPDevice.objects.filter(user=user, name="default", confirmed=True).first()
             if device:
                 return Response({
                     "message": "Please enter your two-factor authentication code.",
                     "type": "2fa_required",
-                    "user_id": user.id,
+                    "user_id": user.id
                 }, status=status.HTTP_200_OK)
             
-            # If 2FA is not set up, proceed with login
+            # Update last login
+            user.last_login = timezone.now()
+            user.save(update_fields=['last_login'])
+            
+            # Generate tokens
             refresh = RefreshToken.for_user(user)
+            
+            # Return structured response
             return Response({
                 "message": "Login successful.",
                 "type": "success",
-                "user": UserSerializer(user, context={"request": request}).data,
-                "access": str(refresh.access_token),
-                "refresh": str(refresh),
+                "user": {
+                    "id": user.id,
+                    "profile": UserSerializer(user, context={"request": request}).data.get('profile'),
+                    "account": {
+                        "is_verified": user.is_active,
+                        "has_2fa": bool(device),
+                        "date_joined": user.date_joined.isoformat(),
+                        "last_login": user.last_login.isoformat()
+                    }
+                },
+                "tokens": {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh)
+                }
             }, status=status.HTTP_200_OK)
 
+        # Error handling
         errors = serializer.errors
         if "non_field_errors" in errors:
             error_message = errors["non_field_errors"][0]
             if error_message == "Account is not activated.":
-                return Response({"message": error_message, "type": "error"}, status=status.HTTP_403_FORBIDDEN)
-            else:
-                return Response({"message": error_message, "type": "error"}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({
+                    "message": error_message,
+                    "type": "error"
+                }, status=status.HTTP_403_FORBIDDEN)
+            return Response({
+                "message": error_message,
+                "type": "error"
+            }, status=status.HTTP_401_UNAUTHORIZED)
 
-        return Response({"message": "Invalid input.", "type": "error", "errors": errors}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            "message": "Invalid input.",
+            "type": "error",
+            "errors": errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 class CustomTokenRefreshView(TokenRefreshView):
     permission_classes = [AllowAny]

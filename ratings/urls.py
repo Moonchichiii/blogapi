@@ -1,7 +1,8 @@
+# urls.py
 from django.urls import path
-from .views import CreateOrUpdateRatingView, GetUserRatingView
+from .views import CreateOrUpdateRatingView, GetPostRatingView
 
 urlpatterns = [
-    path("rate/", CreateOrUpdateRatingView.as_view(), name="create-update-rating"),
-    path("rate/<int:post_id>/", GetUserRatingView.as_view(), name="get-user-rating"),
+    path("ratings/", CreateOrUpdateRatingView.as_view(), name="create-update-rating"),
+    path("ratings/<int:post_id>/", GetPostRatingView.as_view(), name="get-post-rating"),
 ]

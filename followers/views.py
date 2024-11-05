@@ -1,95 +1,56 @@
+from django.db import transaction
 from django.contrib.auth import get_user_model
+from django.http import Http404  # Add this import
 from rest_framework import generics, permissions, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import Follow
 from .serializers import FollowSerializer
 from profiles.models import Profile
+from profiles.serializers import ProfileSerializer
 from .signals import invalidate_follower_cache
 import logging
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
+class PopularFollowersView(generics.ListAPIView):
+    serializer_class = ProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Assuming we retrieve popular profiles based on a follower count threshold
+        return Profile.objects.order_by('-follower_count')[:10] 
+
 class FollowerDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = FollowSerializer
     permission_classes = [permissions.IsAuthenticated]
+    queryset = Follow.objects.all()  # Define the queryset here for general follow instances
 
-    def post(self, request, *args, **kwargs):
-        print("POST request received.")
-        followed_id = request.data.get("followed")
-        print(f"Followed ID: {followed_id}")
-        
-        if not followed_id or request.user.id == int(followed_id):
-            logger.warning(f"User {request.user.id} tried to follow themselves or provided an invalid ID.")
-            print("Invalid follow attempt.")
-            return Response({
-                "error": "You cannot follow yourself or the provided ID is invalid.",
-                "type": "error"
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
+    def get_queryset(self):
+        # Optionally, override get_queryset if further filtering is needed
+        # Only retrieves follows associated with the provided `user_id`
+        return Follow.objects.filter(followed_id=self.kwargs['user_id'])
+
+    def get_object(self):
+        # Retrieves a specific follow instance where the user is following another user
         try:
-            followed_user = User.objects.get(id=followed_id)
-        except User.DoesNotExist:
-            logger.warning(f"User {request.user.id} tried to follow non-existent user {followed_id}.")
-            return Response({
-                "error": "The user you're trying to follow doesn't exist.",
-                "type": "error"
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        follow, created = Follow.objects.get_or_create(
-            follower=request.user, followed=followed_user
-        )
-        print(f"Follow object: {follow}, Created: {created}")
-        
-        if created:
-            serializer = self.get_serializer(follow)
-            
-            logger.info(f"User {request.user.id} successfully followed user {followed_id}.")
-            print("Follow successful.")
-            return Response({
-                "data": serializer.data,
-                "message": "You have successfully followed the user.",
-                "type": "success"
-            }, status=status.HTTP_201_CREATED)
-        
-        logger.info(f"User {request.user.id} is already following user {followed_id}.")
-        print("Already following.")
-        return Response({
-            "error": "You are already following this user.",
-            "type": "error"
-        }, status=status.HTTP_400_BAD_REQUEST)
+            return Follow.objects.get(
+                follower=self.request.user,
+                followed_id=self.kwargs['user_id']
+            )
+        except Follow.DoesNotExist:
+            raise Http404("Follow relationship does not exist.")
 
     def delete(self, request, *args, **kwargs):
-        print("DELETE request received.")
         followed_id = request.data.get("followed")
-        print(f"Followed ID: {followed_id}")
         if not followed_id:
-            logger.warning(f"User {request.user.id} provided no followed ID for unfollowing.")
-            print("No followed ID provided.")
-            return Response({
-                "error": "Followed user ID is required.",
-                "type": "error"
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            follow = Follow.objects.get(follower=request.user, followed_id=followed_id)
-            follow.delete()
+            return Response({"error": "Invalid unfollow request."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Update follower count
-            Profile.objects.filter(user_id=followed_id).update(
-                follower_count=Follow.objects.filter(followed_id=followed_id).count()
-            )
-
-            logger.info(f"User {request.user.id} successfully unfollowed user {followed_id}.")
-            print("Unfollow successful.")
-            return Response({
-                "message": "You have successfully unfollowed the user.",
-                "type": "success"
-            }, status=status.HTTP_200_OK)
-        except Follow.DoesNotExist:
-            logger.warning(f"User {request.user.id} attempted to unfollow user {followed_id} but was not following them.")
-            print("Not following the user.")
-            return Response({
-                "error": "You are not following this user.",
-                "type": "error"
-            }, status=status.HTTP_400_BAD_REQUEST)
+        follow = Follow.objects.filter(follower=request.user, followed_id=followed_id).first()
+        if follow:
+            with transaction.atomic():
+                follow.delete()
+                invalidate_follower_cache(followed_id)  # Invalidate cache on unfollow
+                return Response({"message": "Unfollowed successfully."}, status=status.HTTP_200_OK)
+        return Response({"error": "Not following user."}, status=status.HTTP_400_BAD_REQUEST)

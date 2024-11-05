@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django_otp.plugins.otp_totp.models import TOTPDevice
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
@@ -6,12 +7,14 @@ from django.db import transaction
 from .models import CustomUser
 from profiles.models import Profile
 from profiles.serializers import ProfileSerializer
+from popularity.models import PopularityMetrics
+import logging
 
 User = get_user_model()
-
+logger = logging.getLogger(__name__)
 
 class LoginSerializer(serializers.Serializer):
-    """Serializer for user login."""
+    """User login serializer."""
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
@@ -35,9 +38,7 @@ class LoginSerializer(serializers.Serializer):
             return data
         raise serializers.ValidationError("Must include 'email' and 'password'.")
 
-
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    """Serializer for user registration."""
     email = serializers.EmailField(
         required=True,
         validators=[UniqueValidator(
@@ -47,17 +48,13 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     )
     profile_name = serializers.CharField(
         required=True,
-        write_only=True,  # Add this to ensure it's only used for write operations
+        write_only=True,
         validators=[UniqueValidator(
-            queryset=Profile.objects.all(),  # Changed to check Profile model
+            queryset=Profile.objects.all(),
             message="This profile name is already taken."
         )]
     )
-    password = serializers.CharField(
-        write_only=True,
-        required=True,
-        validators=[validate_password]
-    )
+    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True)
 
     class Meta:
@@ -71,35 +68,53 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        # Store profile_name for signal handler
-        profile_name = validated_data.pop('profile_name')
-        validated_data.pop('password2', None)
-        
-        # Create user without profile_name
-        user = CustomUser.objects.create_user(
-            email=validated_data["email"],
-            password=validated_data["password"],
-        )
-        
-        # Update the profile created by the signal
-        if hasattr(user, 'profile'):
-            user.profile.profile_name = profile_name
-            user.profile.save()
-        
-        return user
+        try:
+            profile_name = validated_data.pop('profile_name')
+            password = validated_data.pop('password')
+            validated_data.pop('password2', None)
 
+            user = CustomUser.objects.create_user(
+                email=validated_data["email"],
+                password=password
+            )
+
+            Profile.objects.create(
+                user=user,
+                profile_name=profile_name,
+                bio=""
+            )
+
+            return user
+        except Exception as e:
+            raise serializers.ValidationError({
+                "message": "Registration failed",
+                "type": "error",
+                "details": str(e)
+            })
 
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(read_only=True)
+    verification = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
-        fields = ("id", "email", "profile")
-        read_only_fields = ("id", "email")
+        fields = ("id", "email", "profile", "verification")
+        read_only_fields = ("id",)
+
+    def get_verification(self, user):
+        device = TOTPDevice.objects.filter(
+            user=user,
+            name="default",
+            confirmed=True
+        ).exists()
+        return {
+            "is_verified": user.is_active,
+            "has_2fa": device
+        }
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        request = self.context.get("request", None)
+        request = self.context.get("request")
         if request and request.user != instance:
             data.pop("email", None)
         return data

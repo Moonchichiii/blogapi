@@ -16,15 +16,15 @@ class ProfileSerializer(serializers.ModelSerializer):
         },
         required=False,
     )
-    image_url = serializers.SerializerMethodField()
+    profile_name = serializers.CharField(read_only=True)
     popularity_score = serializers.SerializerMethodField()
     
     class Meta:
         model = Profile
         fields = [
+            "profile_name",
             "bio",
             "image",
-            "image_url",
             "popularity_score",
             "follower_count",
             "following_count",
@@ -33,10 +33,8 @@ class ProfileSerializer(serializers.ModelSerializer):
             "popularity_score",
             "follower_count",
             "following_count",
+            "profile_name",
         ]
-
-    def get_image_url(self, obj):
-        return obj.image.url if obj.image else None
 
     def get_popularity_score(self, obj):
         try:
@@ -53,3 +51,20 @@ class ProfileSerializer(serializers.ModelSerializer):
             instance.image = validated_data["image"]
         instance.save()
         return instance
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        
+        # Transform image data if it exists
+        if data.get('image'):
+            data['image'] = {
+                'url': instance.image.url,
+                'thumbnail': f"{instance.image.url.replace('/upload/', '/upload/c_thumb,h_200,w_200/')}"
+            }
+        else:
+            data['image'] = {
+                'url': None,
+                'thumbnail': None
+            }
+        
+        return data

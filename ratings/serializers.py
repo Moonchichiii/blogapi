@@ -16,28 +16,16 @@ class RatingSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Rating
-        fields = ["value"]
-
-    def validate(self, attrs):
-        if attrs['post'].author == self.context['request'].user:
-            raise serializers.ValidationError("You cannot rate your own post.")
-        return attrs
-
-    class Meta:
-        model = Rating
         fields = ["id", "profile_name", "post", "value", "post_title"]
-
-    def validate_value(self, value):
-        if not (1 <= value <= 5):
-            raise serializers.ValidationError("Rating value must be between 1 and 5.")
-        return value
-
-    def validate_post(self, value):
-        if not value.is_approved:
-            raise serializers.ValidationError("You cannot rate an unapproved post.")
-        return value
+        read_only_fields = ["id", "profile_name", "post_title"]
 
     def validate(self, attrs):
+        # Validate the post is approved
+        if not attrs['post'].is_approved:
+            raise serializers.ValidationError("You cannot rate an unapproved post.")
+            
+        # Validate user is not rating their own post    
         if attrs['post'].author == self.context['request'].user:
             raise serializers.ValidationError("You cannot rate your own post.")
+            
         return attrs

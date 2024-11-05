@@ -12,6 +12,7 @@ from .views import (
     TwoFactorVerifyView,
     AccountDeletionView,
     CustomTokenRefreshView,
+    
 )
 
 urlpatterns = [
@@ -19,6 +20,7 @@ urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
     path('activate/', ActivateAccountView.as_view(), name='activate'),
     
+        
     # User login and logout
     path("login/", LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
@@ -26,7 +28,7 @@ urlpatterns = [
     # Current user info
     path("current-user/", CurrentUserView.as_view(), name="current_user"),
     
-    # Token refresh
+      # Token refresh
     path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     
     # Password reset
@@ -45,7 +47,7 @@ urlpatterns = [
     
     # Two-factor authentication setup and verification
     path("setup-2fa/", SetupTwoFactorView.as_view(), name="setup_2fa"),
-    path("verify-2fa/", TwoFactorVerifyView.as_view(), name="verify_2fa"),
+    path("verify-2fa/", TwoFactorVerifyView.as_view(), name="verify_2fa"), 
     
     # Update email
     path("update-email/", UpdateEmailView.as_view(), name="update_email"),

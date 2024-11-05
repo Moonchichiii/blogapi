@@ -31,18 +31,30 @@ class PostCursorPagination(PageNumberPagination):
     max_page_size = MAX_PAGE_SIZE
 
 class PostList(generics.ListCreateAPIView):
-    serializer_class = PostListSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     pagination_class = PostCursorPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ["is_approved"]
-    search_fields = ["title", "content", "author__profile_name"]
-    ordering_fields = ["created_at", "updated_at"]
+    search_fields = ["title", "content", "author__profile__profile_name"]
+    ordering_fields = ["created_at", "updated_at", "average_rating"]
     ordering = ["-created_at"]
-    throttle_classes = [] 
+    throttle_classes = []
+
+    def get_serializer_class(self):
+        """Use PostSerializer for authenticated users requesting detail."""
+        if self.request.user.is_authenticated and self.request.query_params.get('detail') == 'true':
+            return PostSerializer
+        return PostListSerializer
 
     def get_queryset(self):
-        queryset = Post.objects.select_related("author").prefetch_related("tags", "ratings")
+        queryset = Post.objects.select_related(
+            "author", 
+            "author__profile"
+        ).prefetch_related(
+            "tags", 
+            "ratings",
+            "comments"
+        )
         user = self.request.user
 
         # Adding the 'author=current' filter
@@ -62,7 +74,7 @@ class PostList(generics.ListCreateAPIView):
             queryset = queryset.filter(
                 Q(title__icontains=search_query) |
                 Q(content__icontains=search_query) |
-                Q(author__profile_name__icontains=search_query)
+                Q(author__profile__profile_name__icontains=search_query)
             )
 
         return queryset.distinct()
