@@ -6,11 +6,22 @@ from .serializers import RatingSerializer
 from .tasks import update_post_stats
 
 class CreateOrUpdateRatingView(generics.CreateAPIView):
+    """Create or update a rating for a post."""
+    
     serializer_class = RatingSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     @transaction.atomic
-    def create(self, request, *args, **kwargs):
+    def create(self, request, *args, **kwargs) -> Response:
+        """
+        Handle POST request to create or update a rating.
+        
+        Args:
+            request (Request): The HTTP request object.
+        
+        Returns:
+            Response: The HTTP response containing the rating data and a success message.
+        """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
@@ -19,7 +30,7 @@ class CreateOrUpdateRatingView(generics.CreateAPIView):
             user=request.user,
             post=post,
             defaults={"value": serializer.validated_data["value"]},
-        )        
+        )
         
         update_post_stats.delay(post.id)
         
@@ -33,10 +44,18 @@ class CreateOrUpdateRatingView(generics.CreateAPIView):
         )
 
 class GetPostRatingView(generics.RetrieveAPIView):
+    """Retrieve the rating of a post for the authenticated user."""
+    
     serializer_class = RatingSerializer
     permission_classes = [permissions.IsAuthenticated]
     
-    def get_object(self):
+    def get_object(self) -> Rating:
+        """
+        Retrieve the rating object for the given post and user.
+        
+        Returns:
+            Rating: The rating object if found, otherwise None.
+        """
         try:
             return Rating.objects.get(
                 post_id=self.kwargs['post_id'],
@@ -45,7 +64,16 @@ class GetPostRatingView(generics.RetrieveAPIView):
         except Rating.DoesNotExist:
             return None
     
-    def get(self, request, *args, **kwargs):
+    def get(self, request, *args, **kwargs) -> Response:
+        """
+        Handle GET request to retrieve the rating.
+        
+        Args:
+            request (Request): The HTTP request object.
+        
+        Returns:
+            Response: The HTTP response containing the rating data or an error message.
+        """
         rating = self.get_object()
         if not rating:
             return Response(
@@ -66,4 +94,3 @@ class GetPostRatingView(generics.RetrieveAPIView):
             },
             status=status.HTTP_200_OK
         )
-

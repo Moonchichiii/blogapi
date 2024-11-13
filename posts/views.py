@@ -12,11 +12,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
-from backend.permissions import (
-    IsPostOwnerOrStaff,
-    CanApprovePost,
-    IsAdminUser
-)
+from backend.permissions import IsPostOwnerOrStaff, CanApprovePost
 from comments.serializers import CommentSerializer
 from .models import Post
 from .serializers import PostListSerializer, PostSerializer
@@ -25,11 +21,13 @@ from .messages import STANDARD_MESSAGES
 logger = logging.getLogger(__name__)
 
 class PostCursorPagination(PageNumberPagination):
+    """Pagination class for posts."""
     page_size = 5
     page_size_query_param = 'page_size'
     max_page_size = 100
 
 class PostList(generics.ListCreateAPIView):
+    """View for listing and creating posts."""
     pagination_class = PostCursorPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ["is_approved"]
@@ -39,54 +37,46 @@ class PostList(generics.ListCreateAPIView):
     permission_classes = [IsPostOwnerOrStaff]
 
     def get_serializer_class(self):
+        """Return appropriate serializer class based on user authentication and query params."""
         if self.request.user.is_authenticated and self.request.query_params.get('detail') == 'true':
             return PostSerializer
         return PostListSerializer
 
     def get_queryset(self):
-        queryset = Post.objects.select_related(
-            "author", 
-            "author__profile"
-        ).prefetch_related(
-            "tags", 
-            "ratings",
-            "comments"
-        )
-        
+        """Return queryset based on user role and authentication."""
+        queryset = Post.objects.select_related("author", "author__profile").prefetch_related("ratings", "comments")
         user = self.request.user
         if not user.is_authenticated:
             return queryset.filter(is_approved=True)
-
-        # Handle different user roles
         if user.has_permission_to(self.request, 'manage_content'):
-            # Staff and admins can see all posts
             return queryset
         elif self.request.query_params.get("author") == "current":
-            # Users can see their own posts
             return queryset.filter(author=user)
-        else:
-            # Users can see approved posts and their own posts
-            return queryset.filter(Q(is_approved=True) | Q(author=user))
+        return queryset.filter(Q(is_approved=True) | Q(author=user))
 
     @method_decorator(cache_page(60 * 15))
     def list(self, request, *args, **kwargs):
+        """List posts with caching."""
         response = super().list(request, *args, **kwargs)
         response.data.update({
             "message": STANDARD_MESSAGES.get("POSTS_RETRIEVED_SUCCESS"),
             "type": "success",
         })
         return response
-    
+
     def perform_create(self, serializer):
+        """Save the post with the current user as the author."""
         serializer.save(author=self.request.user)
 
 class PostDetail(generics.RetrieveUpdateDestroyAPIView):
+    """View for retrieving, updating, and deleting a post."""
     queryset = Post.objects.all()
     serializer_class = PostSerializer
     permission_classes = [IsPostOwnerOrStaff]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def retrieve(self, request, *args, **kwargs):
+        """Retrieve a post along with its comments."""
         instance = self.get_object()
         serializer = self.get_serializer(instance)
         data = serializer.data
@@ -98,16 +88,14 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
         })
 
     def update(self, request, *args, **kwargs):
+        """Update a post and handle reapproval if necessary."""
         instance = self.get_object()
         partial = kwargs.pop("partial", False)
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-
-        # If the author updates their post, it needs reapproval
         if request.user == instance.author and not request.user.has_permission_to(request, 'approve_posts'):
             instance.is_approved = False
             instance.save(update_fields=["is_approved"])
-
         self.perform_update(serializer)
         return Response({
             "data": serializer.data,
@@ -116,6 +104,7 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
         })
 
     def destroy(self, request, *args, **kwargs):
+        """Delete a post."""
         instance = self.get_object()
         self.perform_destroy(instance)
         return Response({
@@ -124,11 +113,13 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
         }, status=status.HTTP_204_NO_CONTENT)
 
 class ApprovePost(generics.UpdateAPIView):
+    """View for approving a post."""
     queryset = Post.objects.all()
     serializer_class = PostSerializer
     permission_classes = [CanApprovePost]
 
     def update(self, request, *args, **kwargs):
+        """Approve a post."""
         instance = self.get_object()
         instance.is_approved = True
         instance.save(update_fields=["is_approved"])
@@ -140,18 +131,20 @@ class ApprovePost(generics.UpdateAPIView):
         })
 
 class UnapprovedPostList(generics.ListAPIView):
+    """View for listing unapproved posts."""
     serializer_class = PostListSerializer
     permission_classes = [CanApprovePost]
 
     def get_queryset(self):
-        return Post.objects.filter(
-            is_approved=False
-        ).select_related("author").prefetch_related("tags").distinct()
+        """Return queryset of unapproved posts."""
+        return Post.objects.filter(is_approved=False).select_related("author").distinct()
 
 class DisapprovePost(APIView):
+    """View for disapproving a post."""
     permission_classes = [CanApprovePost]
 
     def post(self, request, pk):
+        """Disapprove a post and send notification email."""
         try:
             post = Post.objects.get(pk=pk)
         except Post.DoesNotExist:
@@ -159,18 +152,14 @@ class DisapprovePost(APIView):
                 "message": "Post not found.",
                 "type": "error",
             }, status=status.HTTP_404_NOT_FOUND)
-
         reason = request.data.get("reason")
         if not reason:
             return Response({
                 "message": "Disapproval reason is required.",
                 "type": "error",
             }, status=status.HTTP_400_BAD_REQUEST)
-
         post.is_approved = False
         post.save(update_fields=["is_approved"])
-        
-        # Send notification email
         send_mail(
             subject="Your post has been disapproved",
             message=f"Your post '{post.title}' has been disapproved.\nReason: {reason}",
@@ -178,7 +167,6 @@ class DisapprovePost(APIView):
             recipient_list=[post.author.email],
             fail_silently=False,
         )
-
         serializer = PostSerializer(post, context={"request": request})
         return Response({
             "data": serializer.data,
