@@ -93,13 +93,17 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             })
 
 class UserSerializer(serializers.ModelSerializer):
+    roles = serializers.SerializerMethodField()
     profile = ProfileSerializer(read_only=True)
     verification = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
-        fields = ("id", "email", "profile", "verification")
-        read_only_fields = ("id",)
+        fields = ("id", "email", "profile", "verification", "roles")
+        read_only_fields = ("id", "roles")
+    
+    def get_roles(self, obj):
+        return obj.roles
 
     def get_verification(self, user):
         device = TOTPDevice.objects.filter(

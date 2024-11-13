@@ -2,8 +2,6 @@ from __future__ import absolute_import, unicode_literals
 import os
 from celery import Celery
 
-
-
 # Set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 
@@ -23,8 +21,6 @@ app.conf.update(
     timezone='UTC',
     enable_utc=True,
 )
-
-
 
 app.conf.task_always_eager = False
 app.conf.task_eager_propagates = True

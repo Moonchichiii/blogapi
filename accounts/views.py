@@ -22,8 +22,6 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .serializers import UserRegistrationSerializer, LoginSerializer, UserSerializer
 from .tokens import account_activation_token
 
-from .serializers import UserSerializer
-
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
@@ -54,6 +52,29 @@ Thank you!
 def generate_2fa_token(device):
     return totp(device.bin_key)
 
+def set_auth_cookies(response, access_token, refresh_token):
+    """Helper function to set authentication cookies"""
+    response.set_cookie(
+        settings.SIMPLE_JWT['AUTH_COOKIE'],
+        str(access_token),
+        max_age=settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds(),
+        secure=settings.SIMPLE_JWT['AUTH_COOKIE_SECURE'],
+        httponly=settings.SIMPLE_JWT['AUTH_COOKIE_HTTP_ONLY'],
+        samesite=settings.SIMPLE_JWT['AUTH_COOKIE_SAMESITE'],
+        path=settings.SIMPLE_JWT['AUTH_COOKIE_PATH']
+    )
+    response.set_cookie(
+        'refresh_token',
+        str(refresh_token),
+        max_age=settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds(),
+        secure=settings.SIMPLE_JWT['AUTH_COOKIE_SECURE'],
+        httponly=settings.SIMPLE_JWT['AUTH_COOKIE_HTTP_ONLY'],
+        samesite=settings.SIMPLE_JWT['AUTH_COOKIE_SAMESITE'],
+        path=settings.SIMPLE_JWT['AUTH_COOKIE_PATH']
+    )
+    return response
+
+# Views
 class RegisterView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
     permission_classes = [AllowAny]
@@ -65,7 +86,7 @@ class RegisterView(generics.CreateAPIView):
         except Exception as e:
             logger.error(f"Error during registration: {str(e)}")
             raise serializers.ValidationError({
-                "message": "Registration failed. Try again later.", 
+                "message": "Registration failed. Try again later.",
                 "type": "error"
             })
 
@@ -78,7 +99,7 @@ class RegisterView(generics.CreateAPIView):
             'uid': uid,
             'exp': (timezone.now() + timedelta(hours=4)).timestamp()
         })
-        # Change from /verify to / 
+        # Change from /verify to /
         activation_link = f"{settings.FRONTEND_URL}/?token={signed_token}"
         send_mail(
             "Verify your account",
@@ -104,14 +125,16 @@ class ActivateAccountView(APIView):
                     user.is_active = True
                     user.save()
                     refresh = RefreshToken.for_user(user)
-                    return Response({
+                    response_data = {
                         "message": "Email verified successfully",
                         "type": "success",
                         "verified": True,
                         "user": UserSerializer(user, context={"request": request}).data,
                         "access": str(refresh.access_token),
                         "refresh": str(refresh),
-                    })
+                    }
+                    response = Response(response_data)
+                    return set_auth_cookies(response, refresh.access_token, refresh)
 
             return Response({"message": "Invalid activation link", "type": "error"}, status=400)
 
@@ -195,7 +218,7 @@ class TwoFactorVerifyView(APIView):
     def post(self, request):
         user_id = request.data.get('user_id')
         token = request.data.get('token')
-       
+        
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
@@ -207,12 +230,14 @@ class TwoFactorVerifyView(APIView):
 
         if device.verify_token(token):
             refresh = RefreshToken.for_user(user)
-            return Response({
+            response_data = {
                 "message": "Two-factor authentication successful.",
                 "type": "success",
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
-            }, status=status.HTTP_200_OK)
+            }
+            response = Response(response_data, status=status.HTTP_200_OK)
+            return set_auth_cookies(response, refresh.access_token, refresh)
         else:
             return Response({"message": "Invalid token.", "type": "error"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -239,8 +264,7 @@ class LoginView(APIView):
             # Generate tokens
             refresh = RefreshToken.for_user(user)
             
-            # Return structured response
-            return Response({
+            response_data = {
                 "message": "Login successful.",
                 "type": "success",
                 "user": {
@@ -250,14 +274,22 @@ class LoginView(APIView):
                         "is_verified": user.is_active,
                         "has_2fa": bool(device),
                         "date_joined": user.date_joined.isoformat(),
-                        "last_login": user.last_login.isoformat()
+                        "last_login": user.last_login.isoformat(),
+                        "roles": {
+                            "is_staff": user.is_staff,
+                            "is_superuser": user.is_superuser,
+                            "is_admin": user.is_staff or user.is_superuser
+                        }
                     }
                 },
                 "tokens": {
                     "access": str(refresh.access_token),
                     "refresh": str(refresh)
                 }
-            }, status=status.HTTP_200_OK)
+            }
+            
+            response = Response(response_data, status=status.HTTP_200_OK)
+            return set_auth_cookies(response, refresh.access_token, refresh)
 
         # Error handling
         errors = serializer.errors
@@ -286,18 +318,7 @@ class CustomTokenRefreshView(TokenRefreshView):
         response = super().post(request, *args, **kwargs)
         if response.status_code == 200:
             tokens = response.data
-            response.set_cookie(
-                "access_token",
-                tokens["access"],
-                httponly=True,
-                secure=request.is_secure(),
-            )
-            response.set_cookie(
-                "refresh_token",
-                tokens["refresh"],
-                httponly=True,
-                secure=request.is_secure(),
-            )
+            return set_auth_cookies(response, tokens['access'], tokens['refresh'])
         return response
 
 class LogoutView(APIView):
@@ -308,13 +329,19 @@ class LogoutView(APIView):
             refresh_token = request.COOKIES.get("refresh_token")
             token = RefreshToken(refresh_token)
             token.blacklist()
-            response = Response({"message": "Logout successful.", "type": "success"}, status=status.HTTP_205_RESET_CONTENT)
-            response.delete_cookie("access_token")
-            response.delete_cookie("refresh_token")
+            response = Response(
+                {"message": "Logout successful.", "type": "success"},
+                status=status.HTTP_205_RESET_CONTENT
+            )
+            response.delete_cookie(settings.SIMPLE_JWT['AUTH_COOKIE'])
+            response.delete_cookie('refresh_token')
             return response
         except Exception as e:
             logger.error(f"Logout failed: {e}")
-            return Response({"message": "Invalid refresh token.", "type": "error", "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"message": "Invalid refresh token.", "type": "error", "error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 # User Management
 class UpdateEmailView(generics.UpdateAPIView):
@@ -350,8 +377,6 @@ class AccountDeletionView(APIView):
             "message": "Your account has been successfully deleted.",
             "type": "success",
         }, status=status.HTTP_200_OK)
-        
-        
 
 class CurrentUserView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
@@ -359,4 +384,3 @@ class CurrentUserView(generics.RetrieveAPIView):
 
     def get_object(self):
         return User.objects.select_related("profile").get(pk=self.request.user.pk)
-

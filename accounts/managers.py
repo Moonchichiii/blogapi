@@ -1,9 +1,4 @@
 from django.contrib.auth.base_user import BaseUserManager
-from django.utils import timezone
-
-# accounts/managers.py
-from django.contrib.auth.base_user import BaseUserManager
-from django.utils import timezone
 
 class CustomUserManager(BaseUserManager):
     """Manager for CustomUser model."""
