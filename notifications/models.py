@@ -12,7 +12,7 @@ class Notification(models.Model):
     read_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
-        return f"Notification for {self.user.profile_name} - {self.notification_type}"
+        return f"Notification for {self.user.profile.profile_name} - {self.notification_type}"
    
     def save(self, *args, **kwargs):
         if not get_user_model().objects.filter(id=self.user_id).exists():
@@ -22,7 +22,7 @@ class Notification(models.Model):
     def mark_as_read(self):
         self.is_read = True
         self.read_at = timezone.now()
-        self.save()
+        self.save(update_fields=['is_read', 'read_at'])
 
     class Meta:
         indexes = [

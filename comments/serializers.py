@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import Comment
 
 class CommentSerializer(serializers.ModelSerializer):
-    author = serializers.CharField(source="author.profile_name", read_only=True)
+    author = serializers.CharField(source="author.profile.profile_name", read_only=True)
     author_image = serializers.SerializerMethodField()
 
     class Meta:
@@ -11,7 +11,11 @@ class CommentSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "author", "created_at", "updated_at", "is_approved", "post"]
 
     def get_author_image(self, obj):
-        return obj.author.profile.image.url if obj.author.profile.image else None
+        profile = getattr(obj.author, 'profile', None)
+        if profile and profile.image:
+            return profile.image.url
+        else:
+            return None
 
     def validate_post(self, value):
         if not value.is_approved:

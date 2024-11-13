@@ -7,7 +7,6 @@ from django.db import transaction
 from .models import CustomUser
 from profiles.models import Profile
 from profiles.serializers import ProfileSerializer
-from popularity.models import PopularityMetrics
 import logging
 
 User = get_user_model()
@@ -101,19 +100,19 @@ class UserSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ("id", "email", "profile", "verification", "roles")
         read_only_fields = ("id", "roles")
-    
+
     def get_roles(self, obj):
         return obj.roles
 
     def get_verification(self, user):
-        device = TOTPDevice.objects.filter(
+        device_exists = TOTPDevice.objects.filter(
             user=user,
             name="default",
             confirmed=True
         ).exists()
         return {
             "is_verified": user.is_active,
-            "has_2fa": device
+            "has_2fa": device_exists
         }
 
     def to_representation(self, instance):

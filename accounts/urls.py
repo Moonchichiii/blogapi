@@ -52,6 +52,7 @@ urlpatterns = [
     # Update email
     path("update-email/", UpdateEmailView.as_view(), name="update_email"),
     
-    # Account deletion
+    # Account deletion    
     path("delete-account/", AccountDeletionView.as_view(), name="delete_account"),
+
 ]

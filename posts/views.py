@@ -12,7 +12,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
-from backend.permissions import IsPostOwnerOrStaff, CanApprovePost
+from backend.permissions import IsOwnerOrAdmin, IsAdminOrSuperUser
 from comments.serializers import CommentSerializer
 from .models import Post
 from .serializers import PostListSerializer, PostSerializer
@@ -34,7 +34,7 @@ class PostList(generics.ListCreateAPIView):
     search_fields = ["title", "content", "author__profile__profile_name"]
     ordering_fields = ["created_at", "updated_at", "average_rating"]
     ordering = ["-created_at"]
-    permission_classes = [IsPostOwnerOrStaff]
+    permission_classes = [IsOwnerOrAdmin]
 
     def get_serializer_class(self):
         """Return appropriate serializer class based on user authentication and query params."""
@@ -72,7 +72,7 @@ class PostDetail(generics.RetrieveUpdateDestroyAPIView):
     """View for retrieving, updating, and deleting a post."""
     queryset = Post.objects.all()
     serializer_class = PostSerializer
-    permission_classes = [IsPostOwnerOrStaff]
+    permission_classes = [IsOwnerOrAdmin]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def retrieve(self, request, *args, **kwargs):
@@ -116,7 +116,7 @@ class ApprovePost(generics.UpdateAPIView):
     """View for approving a post."""
     queryset = Post.objects.all()
     serializer_class = PostSerializer
-    permission_classes = [CanApprovePost]
+    permission_classes = [IsAdminOrSuperUser]
 
     def update(self, request, *args, **kwargs):
         """Approve a post."""
@@ -130,18 +130,20 @@ class ApprovePost(generics.UpdateAPIView):
             "type": "success",
         })
 
+
 class UnapprovedPostList(generics.ListAPIView):
     """View for listing unapproved posts."""
     serializer_class = PostListSerializer
-    permission_classes = [CanApprovePost]
+    permission_classes = [IsAdminOrSuperUser]
 
     def get_queryset(self):
         """Return queryset of unapproved posts."""
         return Post.objects.filter(is_approved=False).select_related("author").distinct()
 
+
 class DisapprovePost(APIView):
     """View for disapproving a post."""
-    permission_classes = [CanApprovePost]
+    permission_classes = [IsAdminOrSuperUser]
 
     def post(self, request, pk):
         """Disapprove a post and send notification email."""
@@ -173,3 +175,4 @@ class DisapprovePost(APIView):
             "message": STANDARD_MESSAGES.get("POST_DISAPPROVED_SUCCESS"),
             "type": "success",
         })
+

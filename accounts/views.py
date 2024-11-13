@@ -21,6 +21,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from .serializers import UserRegistrationSerializer, LoginSerializer, UserSerializer
 from .tokens import account_activation_token
+from backend.permissions import IsOwnerOrAdmin
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -264,6 +265,7 @@ class LoginView(APIView):
             # Generate tokens
             refresh = RefreshToken.for_user(user)
             
+            # Build response data with detailed user info
             response_data = {
                 "message": "Login successful.",
                 "type": "success",
@@ -291,7 +293,7 @@ class LoginView(APIView):
             response = Response(response_data, status=status.HTTP_200_OK)
             return set_auth_cookies(response, refresh.access_token, refresh)
 
-        # Error handling
+        # Error handling remains the same
         errors = serializer.errors
         if "non_field_errors" in errors:
             error_message = errors["non_field_errors"][0]
@@ -311,8 +313,9 @@ class LoginView(APIView):
             "errors": errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class CustomTokenRefreshView(TokenRefreshView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
@@ -345,7 +348,7 @@ class LogoutView(APIView):
 
 # User Management
 class UpdateEmailView(generics.UpdateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
     serializer_class = UserSerializer
 
     def get_object(self):
@@ -367,11 +370,15 @@ class UpdateEmailView(generics.UpdateAPIView):
             "errors": serializer.errors,
         }, status=status.HTTP_400_BAD_REQUEST)
 
-class AccountDeletionView(APIView):
-    permission_classes = [IsAuthenticated]
+class AccountDeletionView(generics.DestroyAPIView):
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+    queryset = User.objects.all()
 
-    def post(self, request):
-        user = request.user
+    def get_object(self):
+        return self.request.user
+
+    def destroy(self, request, *args, **kwargs):
+        user = self.get_object()
         user.delete()
         return Response({
             "message": "Your account has been successfully deleted.",

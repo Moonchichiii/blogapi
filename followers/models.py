@@ -20,4 +20,4 @@ class Follow(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.follower.profile_name} follows {self.followed.profile_name}"
+        return f"{self.follower.profile.profile_name} follows {self.followed.profile.profile_name}"

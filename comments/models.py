@@ -15,4 +15,4 @@ class Comment(models.Model):
         indexes = [models.Index(fields=["post", "-created_at"])]
 
     def __str__(self):
-        return f"Comment by {self.author.profile_name} on {self.post.title}"
+        return f"Comment by {self.author.profile.profile_name} on {self.post.title}"

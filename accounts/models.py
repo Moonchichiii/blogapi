@@ -26,9 +26,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     def roles(self):
         """Get user roles for frontend use"""
         return {
-            'is_admin': self.is_superuser,
+            'is_admin': self.is_staff or self.is_superuser,
             'is_staff': self.is_staff,
-            'is_moderator': False,  # Add if you want to implement moderator role
+            'is_superuser': self.is_superuser,
             'is_verified': self.is_active
         }
 

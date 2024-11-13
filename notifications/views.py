@@ -6,6 +6,8 @@ from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from .models import Notification
 from .serializers import NotificationSerializer
+from rest_framework.permissions import IsAuthenticated
+from backend.permissions import IsOwnerOrAdmin
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ class CustomPagination(PageNumberPagination):
 
 class NotificationListView(generics.ListAPIView):
     serializer_class = NotificationSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
     pagination_class = CustomPagination
 
     def get_queryset(self):
@@ -34,19 +36,16 @@ class NotificationListView(generics.ListAPIView):
 class MarkNotificationAsReadView(generics.UpdateAPIView):
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 
     def update(self, request, *args, **kwargs):
         notification = self.get_object()
-        if notification.user != request.user:
-            raise PermissionDenied("You do not have permission to mark this notification as read.")
         notification.mark_as_read()
         logger.info(f"Notification {notification.id} marked as read.")
         return Response({"message": "Notification marked as read"}, status=status.HTTP_200_OK)
-    
 
 class BulkMarkNotificationsAsReadView(generics.UpdateAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def patch(self, request, *args, **kwargs):
         Notification.objects.filter(user=request.user, is_read=False).update(is_read=True, read_at=timezone.now())
@@ -55,7 +54,8 @@ class BulkMarkNotificationsAsReadView(generics.UpdateAPIView):
 
 class DeleteNotificationView(generics.DestroyAPIView):
     queryset = Notification.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 
     def get_object(self):
         obj = super().get_object()

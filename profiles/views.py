@@ -5,11 +5,12 @@ from django.views.decorators.cache import cache_page
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import Profile
 from .serializers import ProfileSerializer
 from followers.models import Follow
 from popularity.models import PopularityMetrics
-from backend.permissions import IsProfileOwnerOrAdmin, BasePermission
+from backend.permissions import IsOwnerOrAdmin
 
 CACHE_TIMEOUT = 60 * 30
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ class CustomPagination(PageNumberPagination):
 class ProfileListView(generics.ListAPIView):
     """List and filter profiles with enhanced permission handling."""
     serializer_class = ProfileSerializer
-    permission_classes = [BasePermission]
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
     pagination_class = CustomPagination
 
     def get_queryset(self):
@@ -64,10 +65,16 @@ class ProfileDetailView(generics.RetrieveUpdateAPIView):
     """Retrieve or update a profile with enhanced permissions."""
     queryset = Profile.objects.select_related('user')
     serializer_class = ProfileSerializer
-    permission_classes = [IsProfileOwnerOrAdmin]
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
     lookup_field = "user__id"
     lookup_url_kwarg = "user_id"
 
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+            return [IsAuthenticated(), IsOwnerOrAdmin()]
+        else:
+            return [AllowAny()]
+        
     def retrieve(self, request, *args, **kwargs):
         """Retrieve a profile with enhanced response."""
         instance = self.get_object()

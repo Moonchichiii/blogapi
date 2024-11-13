@@ -1,12 +1,12 @@
-from rest_framework import generics, permissions, status
+from rest_framework import generics, status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.shortcuts import get_object_or_404
 from posts.models import Post
 from .models import Comment
 from .serializers import CommentSerializer
-from backend.permissions import IsOwnerOrReadOnly
+from backend.permissions import IsOwnerOrAdmin, IsAdminOrSuperUser
 
 class CommentPagination(PageNumberPagination):
     page_size = 10
@@ -20,32 +20,28 @@ class CommentList(generics.ListCreateAPIView):
     def get_permissions(self):
         if self.request.method == 'POST':
             return [IsAuthenticated()]
-        return [permissions.AllowAny()]
+        return [AllowAny()]
 
     def get_queryset(self):
-        return Comment.objects.filter(post_id=self.kwargs["post_id"], is_approved=True).select_related("author")
+        return Comment.objects.filter(
+            post_id=self.kwargs["post_id"],
+            is_approved=True
+        ).select_related("author__profile")
 
     def perform_create(self, serializer):
         post = get_object_or_404(Post, pk=self.kwargs["post_id"])
         serializer.save(author=self.request.user, post=post)
 
-    def create(self, request, *args, **kwargs):
-        post = get_object_or_404(Post, pk=self.kwargs["post_id"])
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
 class CommentDetail(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Comment.objects.select_related("author", "post")
+    queryset = Comment.objects.select_related("author__profile", "post")
     serializer_class = CommentSerializer
-    permission_classes = [IsOwnerOrReadOnly]
+    permission_classes = [IsOwnerOrAdmin]
+
 
 class ModerateComment(generics.UpdateAPIView):
     queryset = Comment.objects.all()
     serializer_class = CommentSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOrSuperUser]
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()

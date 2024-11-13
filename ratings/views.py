@@ -1,6 +1,7 @@
 from django.db import transaction
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from .models import Rating
 from .serializers import RatingSerializer
 from .tasks import update_post_stats
@@ -47,7 +48,7 @@ class GetPostRatingView(generics.RetrieveAPIView):
     """Retrieve the rating of a post for the authenticated user."""
     
     serializer_class = RatingSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
     
     def get_object(self) -> Rating:
         """
