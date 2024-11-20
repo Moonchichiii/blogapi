@@ -1,6 +1,6 @@
 import logging
 from django.utils import timezone
-from rest_framework import generics, permissions, status
+from rest_framework import generics, status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied

@@ -17,7 +17,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView, TokenError
 
 from .serializers import UserRegistrationSerializer, LoginSerializer, UserSerializer
 from .tokens import account_activation_token
@@ -313,16 +313,24 @@ class LoginView(APIView):
             "errors": errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class CustomTokenRefreshView(TokenRefreshView):
-    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        if response.status_code == 200:
-            tokens = response.data
-            return set_auth_cookies(response, tokens['access'], tokens['refresh'])
-        return response
+        refresh_token = request.COOKIES.get('refresh_token')
+        if not refresh_token:
+            return Response({"message": "Refresh token not provided.", "type": "error"}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(data={'refresh': refresh_token})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError as e:
+            return Response({"message": "Invalid refresh token.", "type": "error"}, status=status.HTTP_400_BAD_REQUEST)
+
+        access_token = serializer.validated_data['access']
+        response = Response({"message": "Token refreshed successfully.", "type": "success"}, status=status.HTTP_200_OK)
+        return set_auth_cookies(response, access_token, refresh_token)
+
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]

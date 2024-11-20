@@ -10,6 +10,7 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from backend.permissions import IsOwnerOrAdmin, IsAdminOrSuperUser
@@ -34,7 +35,7 @@ class PostList(generics.ListCreateAPIView):
     search_fields = ["title", "content", "author__profile__profile_name"]
     ordering_fields = ["created_at", "updated_at", "average_rating"]
     ordering = ["-created_at"]
-    permission_classes = [IsOwnerOrAdmin]
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 
     def get_serializer_class(self):
         """Return appropriate serializer class based on user authentication and query params."""
